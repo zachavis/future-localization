@@ -12,9 +12,9 @@ import pandas as pd
 
 import torch
 
-import DNN
-import DataGens
-from DNN import *
+from Common import DNN
+from Common import DataGens
+#from DNN import *
 
 
 from scipy import interpolate
@@ -219,6 +219,7 @@ if __name__ == "__main__":
         #im = im2double(intermediate); % im2double(imread(im));
 
         tr_ground = (tr['XYZ'].T - tr['up']).T #bsxfun(@minus, tr['XYZ'], tr['up']);
+        t, r = Coord2Polar(tr_ground[2],tr_ground[0])
         tr_ground = K_data @ R_rect @ tr_ground;
         if np.any(tr_ground[2,:]<0):
             tr_ground[:2,:] = np.nan
@@ -231,7 +232,7 @@ if __name__ == "__main__":
         
         # set up egocentric image information in log polar space
 
-        t, r = Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
+        #t, r = Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
         logr = np.log(r)
 
         #world_forward = 
@@ -287,19 +288,19 @@ if __name__ == "__main__":
         img_height = 64
 
         minR = -.5
-        maxR = 4.5
+        maxR = 5#4.5
         minT = -2*np.pi/3
         maxT = 2*np.pi/3
 
         aspect_ratio = (maxT-minT)/(maxR-minR)
         ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
 
-        ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[1]  )
-        ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[0]  )
+        ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
+        ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[1]  )
 
         
-        ego_pix2r = lambda x : RemapRange(x, 0, ego_pixel_shape[1], minR,maxR   )
-        ego_pix2t = lambda x : RemapRange(x,0,ego_pixel_shape[0], minT,maxT  )
+        ego_pix2r = lambda x : RemapRange(x, 0, ego_pixel_shape[0], minR,maxR   )
+        ego_pix2t = lambda x : RemapRange(x,0,ego_pixel_shape[1], minT,maxT  )
 
         RecenterDataForwardWithShape = lambda x, shape : RemapRange(x,0,max(shape[0],shape[1]),-1,1)
         RecenterDataForwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,0,max(shape[0],shape[1]),-scale,scale)
@@ -561,7 +562,7 @@ if __name__ == "__main__":
         #values = -stats.norm.pdf(closest_distances) * time_along_trajectory#time_along_trajectory
         #coord_value = values
 
-        all_pixel_coords_xformed = np.zeros(all_pixel_coords.shape)
+        all_pixel_coords_xformed = np.zeros(all_pixel_coords.shape).astype(np.float32)
         all_pixel_coords_xformed[:,0] = ego_pix2t(all_pixel_coords[:,0])
         all_pixel_coords_xformed[:,1] = np.exp(ego_pix2r(all_pixel_coords[:,1]))
 
@@ -743,7 +744,7 @@ if __name__ == "__main__":
 
         n_samples = 30000 # 25000
         n_obstsamples = 1#30000
-        n_2sample_laplacian = 500
+        n_2sample_laplacian = 10000
         n_2sample = 1#15000
 
         pixtol = 2#0.3
@@ -820,7 +821,8 @@ if __name__ == "__main__":
         # print(pix[0,0,1])
 
         #hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward,torch.zeros((1,32,32)))
-        hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        #hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset2(future_trajectory,n_2sample_laplacian,RecenterTrajDataForward,all_pixel_coords,img_channel_swap) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset2(newtraj,n_2sample_laplacian,RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,img_channel_swap,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
 
 
@@ -841,7 +843,7 @@ if __name__ == "__main__":
 
 
         #Training parameters
-        num_epochs = 100 #15000 #1000
+        num_epochs = 10000 #15000 #1000
         print_interval = 1
         learning_rate = 5e-5#1e-5
         loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()
@@ -863,7 +865,8 @@ if __name__ == "__main__":
         hyper_testing_set = hyper_trajectory_data_set
         hyper_training_generator = torch.utils.data.DataLoader(hyper_training_set, batch_size = 1, shuffle=True)
         hyper_testing_generator = torch.utils.data.DataLoader(hyper_testing_set, batch_size = 1)
-
+        
+        i, (pos, pix) = next(enumerate(hyper_training_generator))
         
         
         field_training_dataset = field_data_set
@@ -879,28 +882,29 @@ if __name__ == "__main__":
         gt_field_training_generator = torch.utils.data.DataLoader(gt_field_training_dataset, batch_size = 1, shuffle=True)
         gt_field_testing_generator = torch.utils.data.DataLoader(gt_field_testing_dataset, batch_size = 1)
 
-        i, (pos, pix) = next(enumerate(gt_field_training_dataset))
+        #i, (pos, pix) = next(enumerate(gt_field_training_dataset))
         
-        fig, ax = plt.subplots(1,1)#, figsize=(36,6))
-        axes = [ax]
+        if (False):
+            fig, ax = plt.subplots(1,1)#, figsize=(36,6))
+            axes = [ax]
 
-        boundsX = (0,ego_pixel_shape[1])
-        boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-        axes[0].set_xlim(*boundsX)
-        axes[0].set_ylim(*boundsY)
+            boundsX = (0,ego_pixel_shape[1])
+            boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            axes[0].set_xlim(*boundsX)
+            axes[0].set_ylim(*boundsY)
 
-        #axes[1].set_xlim(*boundsX)
-        #axes[1].set_ylim(*boundsY)
+            #axes[1].set_xlim(*boundsX)
+            #axes[1].set_ylim(*boundsY)
 
-        tempval = axes[0].imshow(np.reshape(pix,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+            tempval = axes[0].imshow(np.reshape(pix,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
         
-        for traj in future_trajectory.values():
-            trajnp = np.array(traj)
-            axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
+            for traj in future_trajectory.values():
+                trajnp = np.array(traj)
+                axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
             
-        cax = fig.add_axes([.3, .95, .4, .05])
-        fig.colorbar(tempval, cax, orientation='horizontal')
-        plt.show()
+            cax = fig.add_axes([.3, .95, .4, .05])
+            fig.colorbar(tempval, cax, orientation='horizontal')
+            plt.show()
 
 
 
@@ -930,8 +934,8 @@ if __name__ == "__main__":
         #network = predModel#testModel#
 
         #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)
-        predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)#,type='relu')
-        network = predModel#testModel#
+        #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)#,type='relu')
+        network = testModel# predModel#
 
         network.cuda()
         network.eval()
@@ -940,9 +944,11 @@ if __name__ == "__main__":
         print("Parameter count:", DNN.CountParameters(network))
 
 
-        DNN.trainAndGraphDerivative(network, gt_field_training_generator, gt_field_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
+        #DNN.trainAndGraphDerivative(network, gt_field_training_generator, gt_field_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
+        
         #DNN.trainAndGraphDerivative(network, field_training_generator, field_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
         #DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
+        DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
         ##DNN.trainAndGraphDerivative(network, trajectory_training_generator, trajectory_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
         #DNN.trainAndGraphDerivative2(network, (trajectory_training_generator, laplacian_training_generator), (trajectory_testing_generator, laplacian_testing_generator), (loss_function, loss_function2), optimizer, num_epochs, learning_rate, print_interval )  # I think Last used for RSS submission, smoothing
         ##trainAndGraphDerivative2(network3, (crowd_training_generator,crowd_training_generator3), (crowd_testing_generator, crowd_testing_generator3), (loss_function3,loss_function4), optimizer3, num_epochs, learning_rate, print_interval)
@@ -968,7 +974,7 @@ if __name__ == "__main__":
         all_coords = np.array( [[ [RecenterTrajDataForward(j+.5),RecenterTrajDataForward(i+.5)] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ]], dtype=np.float32)
         all_coords = torch.unsqueeze( torch.from_numpy(all_coords), 0)
 
-        all_coords = torch.unsqueeze( torch.from_numpy(RecenterTrajDataForward(all_pixel_coords)), 0)
+        all_coords = torch.unsqueeze( torch.from_numpy(RecenterTrajDataForward(all_pixel_coords.astype(np.float32))), 0)
 
 
         print(all_coords.shape)

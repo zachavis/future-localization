@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>bf1d0411-f2b6-4b3d-ac07-f174c739ecfc</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>EgoPsiren.py</StartupFile>
+    <StartupFile>EgoPsirenBigTest.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -24,13 +24,25 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="DataGens.py">
+    <Compile Include="Common\DataGens.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="EFL-Benchmark.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="EgoPsiren.py" />
-    <Compile Include="DNN.py">
+    <Compile Include="Common\DNN.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="EgoPsirenBigTest.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="EgoPsirenVisualizer.py">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Common\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
