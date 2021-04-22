@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>bf1d0411-f2b6-4b3d-ac07-f174c739ecfc</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>EgoPsirenBigTest.py</StartupFile>
+    <StartupFile>EgoPsirenBigStreamlined.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -12,7 +12,7 @@
     <Name>EgoPsiren</Name>
     <RootNamespace>EgoPsiren</RootNamespace>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>testCMD</CommandLineArguments>
+    <CommandLineArguments>-d S:/fut_loc/ -o S:/ego_models/bestTestLoss.pt</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -27,6 +27,9 @@
     <Compile Include="Common\DataGens.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Common\DataReader.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="EFL-Benchmark.py">
       <SubType>Code</SubType>
     </Compile>
@@ -34,10 +37,16 @@
     <Compile Include="Common\DNN.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="EgoPsirenBigStreamlined.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="EgoPsirenBigTest.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="EgoPsirenVisualizer.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="point_cloud_visualizer.py">
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>

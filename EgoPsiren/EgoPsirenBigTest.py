@@ -19,6 +19,7 @@ from Common import DataGens
 
 
 from scipy import interpolate
+from scipy import stats
 
 
 def FileAsLines(fid):
@@ -110,7 +111,6 @@ def RemapRange (value, low1, high1, low2, high2):
 
 
 
-from scipy import stats
 
 def DistanceFromLine (line, point):
     homogPoint = np.array([point[0], point[1], 1])
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path = 'H:\\fut_loc\\' #20150401_walk_00\\'
+    partial_folder_path = 'S:\\fut_loc\\' #20150401_walk_00\\'
 
 
 

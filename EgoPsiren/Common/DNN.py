@@ -775,13 +775,13 @@ def graphLoss(epoch_counter, train_loss_hist, test_loss_hist, start = 0):
 
 
 def logResults(epoch, num_epochs, train_loss, train_loss_history, test_loss, test_loss_history, epoch_counter, print_interval=1):
-  if (epoch%print_interval == 0):  print('Epoch [%d/%d], Train Loss: %.4f, Test Loss: %.4f' %(epoch, num_epochs, train_loss, test_loss))
+  if (epoch%print_interval == 0):  print('Epoch [%d/%d], Train Loss: %.4f, Test Loss: %.4f' %(epoch+1, num_epochs, train_loss, test_loss))
   train_loss_history.append(train_loss)
   test_loss_history.append(test_loss)
   epoch_counter.append(epoch)
 
 
-def trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, num_epochs, learning_rate, logging_rate=1, train = train, test = test_with_grad, graph = True):
+def trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, num_epochs, learning_rate, output_path, logging_rate=1, train = train, test = test_with_grad, graph = True):
   
   #print('training and graphing')
   #Arrays to store training history
@@ -789,11 +789,18 @@ def trainAndGraph(network, training_generator, testing_generator, loss_function,
   epoch_counter = []
   train_loss_history = []
 
+  best_test_loss = np.inf
+
   for epoch in range(num_epochs):                           
     avg_loss = train(network, training_generator, loss_function, optimizer, epoch)
     test_loss = test(network, testing_generator, loss_function, epoch)
+    if test_loss < best_test_loss:
+        torch.save(network, output_path)
+        best_test_loss = test_loss
+
     logResults(epoch, num_epochs, avg_loss, train_loss_history, test_loss, test_loss_history, epoch_counter, logging_rate)
       
+  print('Best test loss: {:.10f}'.format(best_test_loss))
   #Run the model on the input data for analysis of the results and error
   #with torch.no_grad():
   #  predicted = network(feature_tensor)
@@ -810,7 +817,7 @@ trainAndGraphDerivative2 = lambda net, train_gen, test_gen, loss_fn, opt, n_epoc
 
 
 
-trainAndGraphDerivative = lambda net, train_gen, test_gen, loss_fn, opt, n_epochs, lr, log_rate = 1 : trainAndGraph(net, train_gen, test_gen, loss_fn, opt, n_epochs, lr, log_rate, train, test_with_grad, graph = True)
+trainAndGraphDerivative = lambda net, train_gen, test_gen, loss_fn, opt, n_epochs, lr, outputPath, log_rate = 1, verbose = False : trainAndGraph(net, train_gen, test_gen, loss_fn, opt, n_epochs, lr, outputPath, log_rate, train, test_with_grad, graph = verbose)
 
 
 
