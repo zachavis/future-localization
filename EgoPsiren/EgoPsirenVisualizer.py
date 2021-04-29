@@ -18,6 +18,7 @@ from Common import DNN
 from Common import DataGens
 from Common import DataReader
 from Common.DataReader import RemapRange
+from Common.DataReader import Coord2Polar
 #from Common.DataReader import coord
 #from DNN import *
 
@@ -34,7 +35,7 @@ if __name__ == "__main__":
 
     LOAD_NETWORK_FROM_DISK = True    
 
-    network = torch.load('hypernet_1200imgs_300epochs.pt')
+    network = torch.load('all_imgs_b64_e300.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
     network.cuda()
     network.eval()
     print("Parameter count:", DNN.CountParameters(network))
@@ -42,7 +43,7 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path = 'S:\\fut_loc\\' #20150401_walk_00\\'
+    partial_folder_path = 'S:\\fut_loc\\test\\' #20150401_walk_00\\'
 
 
 
@@ -57,9 +58,9 @@ if __name__ == "__main__":
     count = 0 # folder ID
     n_folders = 17 #15
     for folder_name in next(os.walk(partial_folder_path))[1]:
-        if count < 16:
-            count += 1
-            continue
+        #if count < 16:
+        #    count += 1
+        #    continue
         if count >= n_folders:
             break
 
@@ -234,6 +235,15 @@ if __name__ == "__main__":
                 axes[2].imshow(img_resized)
                 plt.show()
 
+
+
+
+
+
+
+
+
+
             # DISPLAY IMAGES
             #fig, axes = plt.subplots(1,3)#, figsize=(18,6))
             ## axes = [ax] # only use if there's 1 column
@@ -327,7 +337,79 @@ if __name__ == "__main__":
                 
                 
                 
-           #np.random.seed(8980)
+            #np.random.seed(8980)
+
+
+
+
+
+            # ######################################################################
+            # Let's get the siren coordinates of our ground plane in the image!
+            # ######################################################################
+
+            def intersectPlaneV(n, p0, l0, L):
+                #print('in')
+                plane_offset = p0-l0
+                denoms = n @ L
+                t = np.zeros(len(denoms))
+                intersecting = np.where(denoms > 1e-6)
+                d = plane_offset @ n
+                result = np.divide( d[None], denoms[intersecting])
+                t[intersecting] = result
+                return t
+        
+
+            depth_img = np.zeros(img_rectified.shape[:2])
+
+        
+            depth_pixel_coords = np.array( [ [j+.5,i+.5,1.0] for i in range(img_rectified.shape[0]) for j in range(img_rectified.shape[1]) ], dtype=np.float32)
+
+            #pixel = np.array([j,i,1])
+            p_normal = -tr['up']/np.linalg.norm(tr['up'])
+            p_origin = -tr['up'] #camera assumed to be at 0,0,0
+            e_origin = np.zeros(3) #zero vector
+            e_rays = R_rect.T @ np.linalg.inv(K_data) @ depth_pixel_coords.T #+0
+            e_rays /= np.linalg.norm(e_rays,axis=0)
+            print('norm:', np.linalg.norm(e_rays[:,100]))
+
+            intplane = lambda l : intersectPlane(p_normal,p_origin,e_origin,l)
+            #vfunc = np.vectorize(intplane)
+            #depths = np.apply_along_axis(intplane, 0, e_rays)
+            image_siren_depths = intersectPlaneV(p_normal,p_origin,e_origin,e_rays)
+            image_siren_points = e_rays * image_siren_depths[None]
+
+            t_im, r_im = Coord2Polar(image_siren_points[2],image_siren_points[0])
+            # r_im = np.clip(r_im,np.exp(minR),np.inf) # clipping only to avoid the log transform being invalid (0)
+            logr_im = np.log(r_im)
+            image_siren_depths[t_im < minT] = 0
+            image_siren_depths[t_im > maxT] = 0
+            image_siren_depths[logr_im < minR] = 0
+            image_siren_depths[logr_im > maxR] = 0
+
+            image_siren_coords = np.stack( (ego_t2pix(t_im), ego_r2pix(logr_im)), axis = 0)
+
+            image_siren_coords = RecenterTrajDataForward(image_siren_coords).astype(np.float32).T
+
+            #print(r2.max())
+            #r2 = np.clip(r2,0,100)
+            #print(r2.max())
+            #rnorm = r2 / r2.max()
+            #t2 = np.clip(t2,-np.pi/4,np.pi/4)
+            #tnorm = t2 / t2.max()
+
+
+            #rad_img = np.reshape(tnorm, depth_img.shape)
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -425,6 +507,10 @@ if __name__ == "__main__":
                 #raw_trajectory = TRAJ_IN_IMAGE_DICTIONARY[testFrame]
 
 
+
+
+
+
             all_pixel_coords_xformed = np.zeros(all_pixel_coords.shape).astype(np.float32)
             all_pixel_coords_xformed[:,0] = ego_pix2t(all_pixel_coords[:,0])
             all_pixel_coords_xformed[:,1] = np.exp(ego_pix2r(all_pixel_coords[:,1]))
@@ -434,7 +520,19 @@ if __name__ == "__main__":
 
             test_image_prediction = torch.from_numpy( np.expand_dims(test_image,0) )
 
+
             network.cpu()
+
+            image_siren_coords_tensor = torch.unsqueeze( torch.from_numpy(image_siren_coords), 0)
+            image_siren_predictions = network({'coords':image_siren_coords_tensor,'img_sparse':test_image_prediction})
+            image_siren_image = (image_siren_predictions['model_out'], image_siren_predictions['model_in'])
+            image_siren_image = image_siren_image[0].cpu().view(raw_image.shape[:2]).detach().numpy()
+            image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
+            image_siren_alpha[image_siren_alpha > 0.001] = .7
+            #image_siren_image_rgba = np.dstack((image_siren_image, image_siren_image, image_siren_image, image_siren_alpha))
+            #print('testingggg',image_siren_image.max())
+            #print(image_siren_alpha.max())
+            #rgb_img = np.dstack((grayscale, grayscale, grayscale, alpha))
 
             #torch.no_grad()
             # Is y x okay or should we do x y
@@ -460,25 +558,30 @@ if __name__ == "__main__":
             print(outImage[0].shape)
             print(outImage[1].shape)
 
-            fig, axes = plt.subplots(1,2)#, figsize=(36,6))
-            fig.suptitle('Comparison of Gradients of Network Output')
+            showHistogram = False
+
+            #if False:
+            if showHistogram:
+                fig, axes = plt.subplots(1,2)#, figsize=(36,6))
+                fig.suptitle('Comparison of Gradients of Network Output')
             #axes = [ax]
             #axes.imshow(outImage[0].cpu().view(distImage.shape).detach().numpy())
 
-            boundsX = (0,ego_pixel_shape[1])
-            boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-            axes[0].set_title('Unnormallized')
-            axes[0].set_xlim(*boundsX)
-            axes[0].set_ylim(*boundsY)
+                boundsX = (0,ego_pixel_shape[1])
+                boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+                axes[0].set_title('Unnormallized')
+                axes[0].set_xlim(*boundsX)
+                axes[0].set_ylim(*boundsY)
     
-            axes[1].set_title('Normalized')
-            axes[1].set_xlim(*boundsX)
-            axes[1].set_ylim(*boundsY)
+                axes[1].set_title('Normalized')
+                axes[1].set_xlim(*boundsX)
+                axes[1].set_ylim(*boundsY)
 
             #axes[0].imshow(-outImage[0].cpu().view(ego_pixel_shape).detach().numpy(), extent=[*(minT,maxT), *(minR,maxR)], interpolation='none')#, cmap='gnuplot')
             outImagea = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
-            tempval = axes[0].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
-            axes[1].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+            if showHistogram:
+                tempval = axes[0].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+                axes[1].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
         
             # Rerun again for gradient
             predictions = network({'coords':all_coords,'img_sparse':test_image_prediction})
@@ -498,50 +601,52 @@ if __name__ == "__main__":
             outImageA = outImageA[0].cpu().view(*ego_pixel_shape,2).detach().numpy() 
             print(outImageA.shape)
 
-            fig2, ax2 = plt.subplots(1,1)
-            ax2.set_title('Histogram of Laplacians')
-            ax2.hist(laplacianA, bins=2000)
+            # HISTOGRAM
+            if showHistogram:
+                fig2, ax2 = plt.subplots(1,1)
+                ax2.set_title('Histogram of Laplacians')
+                ax2.hist(laplacianA, bins=2000)
 
 
-            coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
+                coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
 
-            # NORMALIZE
-            vx = outImageA[:,:,0]#.flatten('F')
-            print(type(vx))
-            vy = outImageA[:,:,1]#.flatten('F')
-            ux = vx#/np.sqrt(vx**2+vy**2)
-            uy = vy#/np.sqrt(vx**2+vy**2)
+                # NORMALIZE
+                vx = outImageA[:,:,0]#.flatten('F')
+                print(type(vx))
+                vy = outImageA[:,:,1]#.flatten('F')
+                ux = vx#/np.sqrt(vx**2+vy**2)
+                uy = vy#/np.sqrt(vx**2+vy**2)
 
 
 
-            axes[0].quiver(coord_x+.5, coord_y+.5, ux,uy, color='red')#, units='xy' ,scale=1
+                axes[0].quiver(coord_x+.5, coord_y+.5, ux,uy, color='red')#, units='xy' ,scale=1
 
-            ux = vx/np.sqrt(vx**2+vy**2)
-            uy = vy/np.sqrt(vx**2+vy**2)
+                ux = vx/np.sqrt(vx**2+vy**2)
+                uy = vy/np.sqrt(vx**2+vy**2)
 
-            axes[1].quiver(coord_x+.5, coord_y+.5, ux,uy, color='red')
+                axes[1].quiver(coord_x+.5, coord_y+.5, ux,uy, color='red')
 
-            #for traj in test_pix_trajectory.values():
-            trajnp = np.array(test_pix_trajectory)
-            axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
-            axes[1].plot(trajnp[:,0], trajnp[:,1], 'r')
-                #axes[0].plot(tpix, logrpix, 'r')
-                #axes[1].plot(tpix, logrpix, 'r')
+                #for traj in test_pix_trajectory.values():
+                trajnp = np.array(test_pix_trajectory)
+                axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
+                axes[1].plot(trajnp[:,0], trajnp[:,1], 'r')
+                    #axes[0].plot(tpix, logrpix, 'r')
+                    #axes[1].plot(tpix, logrpix, 'r')
 
-            #print(testpos)
-            axes[0].plot(*test_pix_trajectory[-1], 'co',markersize=2)
-            axes[1].plot(*test_pix_trajectory[-1], 'co',markersize=2)
+                #print(testpos)
+                axes[0].plot(*test_pix_trajectory[-1], 'co',markersize=2)
+                axes[1].plot(*test_pix_trajectory[-1], 'co',markersize=2)
 
-            #for obs_traj in obstacle_trajectory.values():
-            #    trajnp = np.array(obs_traj)
-            #    axes[0].plot(trajnp[:,0], trajnp[:,1], 'c')
-            #    axes[1].plot(trajnp[:,0], trajnp[:,1], 'c')
+                #for obs_traj in obstacle_trajectory.values():
+                #    trajnp = np.array(obs_traj)
+                #    axes[0].plot(trajnp[:,0], trajnp[:,1], 'c')
+                #    axes[1].plot(trajnp[:,0], trajnp[:,1], 'c')
 
 
         
-            cax = fig.add_axes([.3, .95, .4, .05])
-            fig.colorbar(tempval, cax, orientation='horizontal')
-            #fig.colorbar(outImagea, axes[0], orientation='vertical')
+                cax = fig.add_axes([.3, .95, .4, .05])
+                fig.colorbar(tempval, cax, orientation='horizontal')
+                #fig.colorbar(outImagea, axes[0], orientation='vertical')
 
 
             load_offset = 1 if LOAD_NETWORK_FROM_DISK else 0
@@ -557,6 +662,11 @@ if __name__ == "__main__":
                 axes[0].set_title('Image (Original)')
                 axes[0].set_aspect(1)
                 axes[0].imshow(raw_image)
+                #axes[0].plot(raw_trajectory[0], raw_trajectory[1], 'r')
+
+                #axes[1].set_title('Siren Overlay (Original)')
+                #axes[1].set_aspect(1)
+                axes[0].imshow(image_siren_image, alpha=image_siren_alpha)
                 axes[0].plot(raw_trajectory[0], raw_trajectory[1], 'r')
         
             axes[0+load_offset].set_title('Input Image (Unnormalized)')
@@ -587,13 +697,13 @@ if __name__ == "__main__":
             #for traj in test_pix_trajectory.values():
 
             #plt.show()
-            mydpi = 300
-            fig.set_dpi(mydpi)
-            fig.set_size_inches(1920/mydpi, 1080/mydpi)
+            #mydpi = 300
+            #fig.set_dpi(mydpi)
+            #fig.set_size_inches(1920/mydpi, 1080/mydpi)
 
 
 
-            fig.savefig('fffigure{}.jpg'.format(str(iFrame)), dpi=mydpi)
+            #fig.savefig('fffigure{}.jpg'.format(str(iFrame)), dpi=mydpi)
 
 
 

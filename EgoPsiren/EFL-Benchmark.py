@@ -130,7 +130,7 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    folder_path = 'H:\\fut_loc\\20150401_walk_00\\'
+    folder_path = 'S:\\fut_loc\\train\\20150401_walk_00\\'
 
     # load calibration
     print('loading calibration file')
@@ -252,7 +252,7 @@ if __name__ == "__main__":
 
 
         # DISPLAY IMAGES
-        fig, axes = plt.subplots(1,3)#, figsize=(18,6))
+        fig, axes = plt.subplots(1,4)#, figsize=(18,6))
         # axes = [ax] # only use if there's 1 column
 
         #newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
@@ -285,15 +285,79 @@ if __name__ == "__main__":
         axes[1].imshow(img_rectified)
         #axes[1].plot(tr_ground[0], tr_ground[1], 'r')
 
+
+        #def intersectPlane(n, p0, l0, l): 
+        #    # assuming vectors are all normalized
+        #    denom = n @ l
+        #    if denom > 1e-6: # hit
+        #        p0l0 = p0 - l0
+        #        t = p0l0 @ n / denom
+        #        return t #(t >= 0)
+        #    return 0  # missed
+
+        def intersectPlaneV(n, p0, l0, L):
+            print('in')
+            plane_offset = p0-l0
+            denoms = n @ L
+            t = np.zeros(len(denoms))
+            intersecting = np.where(denoms > 1e-6)
+            d = plane_offset @ n
+            result = np.divide( d[None], denoms[intersecting])
+            t[intersecting] = result
+            return t
         
-        axes[2].set_title('Traj in EgoMap')
-        axes[2].set_xlim((-2*np.pi/3, 2*np.pi/3))
+
+        depth_img = np.zeros(img_rectified.shape[:2])
+
+        
+        depth_pixel_coords = np.array( [ [j+.5,i+.5,1.0] for i in range(img_rectified.shape[0]) for j in range(img_rectified.shape[1]) ], dtype=np.float32)
+
+        #pixel = np.array([j,i,1])
+        p_normal = -tr['up']/np.linalg.norm(tr['up'])
+        p_origin = -tr['up'] #camera assumed to be at 0,0,0
+        e_origin = np.zeros(3) #zero vector
+        e_rays = R_rect.T @ np.linalg.inv(K_data) @ depth_pixel_coords.T #+0
+        e_rays /= np.linalg.norm(e_rays,axis=0)
+        print('norm:', np.linalg.norm(e_rays[:,100]))
+
+        intplane = lambda l : intersectPlane(p_normal,p_origin,e_origin,l)
+        #vfunc = np.vectorize(intplane)
+        #depths = np.apply_along_axis(intplane, 0, e_rays)
+        depths = intersectPlaneV(p_normal,p_origin,e_origin,e_rays)
+        points = e_rays * depths[None]
+
+        t2, r2 = Coord2Polar(points[2],points[0])
+        print(r2.max())
+        r2 = np.clip(r2,0,100)
+        print(r2.max())
+        rnorm = r2 / r2.max()
+        t2 = np.clip(t2,-np.pi/4,np.pi/4)
+        tnorm = t2 / t2.max()
+
+
+        #points = np.multiply(e_rays,depths)
+
+        #depths = intersectPlane(p_normal,p_origin,e_origin,e_ray)
+        rad_img = np.reshape(tnorm, depth_img.shape)
+        #depth_img = np.reshape(depths, depth_img.shape)
+        #print(depth_img.max())
+        #print(depth_img.min())
+        #depth_img = np.clip(depth_img,0,1)
+
+        
+        axes[2].set_title('Plane image')
+        axes[2].imshow(rad_img)
+
+
+        
+        axes[3].set_title('Traj in EgoMap')
+        axes[3].set_xlim((-2*np.pi/3, 2*np.pi/3))
         #axes[0].set_ylim(*crowdBoundsY)
-        axes[2].set_aspect(1)
+        axes[3].set_aspect(1)
         #axes[1].imshow(img)
 
         
-        axes[2].plot(t, logr, 'r')
+        axes[3].plot(t, logr, 'r')
 
 
         plt.show()
