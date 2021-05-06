@@ -157,6 +157,9 @@ LOAD_NETWORK_FROM_DISK = False
 if __name__ == "__main__":
     #DNN.current_epoch = 0
 
+    BATCH_SIZE = 64
+    N_WORKERS = 4
+
 
     # FORNOW: Just going to assume it's only in train mode
     # TODO: allow loading of model
@@ -400,9 +403,12 @@ if __name__ == "__main__":
 
                 #im = im2double(intermediate); % im2double(imread(im));
 
-                tr_ground = (tr['XYZ'].T - tr['up']).T #bsxfun(@minus, tr['XYZ'], tr['up']);
-                t, r = Coord2Polar(tr_ground[2],tr_ground[0])
-                tr_ground = K_data @ R_rect @ tr_ground;
+                tr_ground_OG = (tr['XYZ'].T - tr['up']).T #bsxfun(@minus, tr['XYZ'], tr['up']);
+
+
+        
+                
+                tr_ground = K_data @ R_rect @ tr_ground_OG;
                 if np.any(tr_ground[2,:]<0):
                     #tr_ground[:2,:] = np.nan # actually maybe I shouldn't NAN here, the only issue is that the trajectory goes behind the camera. Maybe that's okay?
                     print('\tThe trajectory is suspicious, and may be behind the user. SKIPPING')
@@ -420,27 +426,23 @@ if __name__ == "__main__":
 
                 #t, r = Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
 
+                
 
 
-            
-                img_height = 64
+                # set up egocentric image information in log polar space
+
+                # TODO put these values in a settings file on disk to force uniformity across programs
+                img_height = 128#64
 
                 minR = -.5
-                maxR = 5#4.5
-                minT = -2*np.pi/3
-                maxT = 2*np.pi/3
+                maxR = 5 #4.5
+                minT = -np.pi/3 #-2*np.pi/3
+                maxT = -minT #2*np.pi/3
 
 
+                
 
-
-
-                test = r < np.exp(minR)
-                if (np.any(r < np.exp(minR))):
-                    print('\tTrajectory is too close to camera origin.')
-                    continue
-                    #print('')
-                logr = np.log(r)
-
+               
                 #world_forward = 
 
                 r_y = -tr['up']/np.linalg.norm(tr['up'])
@@ -450,6 +452,24 @@ if __name__ == "__main__":
                 r_x = np.cross(r_y, r_z)
 
                 R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
+
+
+                tr_ground_ALIGNED = R_rect_ego @ tr_ground_OG # ALIGN CAMERA SPACE GROUND PLANE TO "WORLD SPACE"
+                t, r = Coord2Polar(tr_ground_ALIGNED[2],tr_ground_ALIGNED[0])#Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
+                #t, r = Coord2Polar(tr_ground[2],tr_ground[0])
+
+
+                test = r < np.exp(minR)
+                if (np.any(r < np.exp(minR))):
+                    print('\tTrajectory is too close to camera origin.')
+                    continue
+                    #print('')
+                logr = np.log(r)
+
+
+
+
+
                 homography = K_data @ R_rect_ego @ np.linalg.inv(K_data)
 
                 img_rectified = cv2.warpPerspective(img*2.0-1.0, homography, (img.shape[1], img.shape[0])) # want to shift the values here so that the normalized version has black in the rectified location
@@ -512,7 +532,7 @@ if __name__ == "__main__":
 
 
 
-                aspect_ratio = (maxT-minT)/(maxR-minR)
+                aspect_ratio = 3/4 #2*#(maxT-minT)/(maxR-minR)
                 ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
 
                 ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
@@ -605,7 +625,7 @@ if __name__ == "__main__":
                 #coord_value = DataGens.Coords2ValueFast(all_pixel_coords,future_trajectory,nscale=1)
 
                 if (PRINT_DEBUG_IMAGES):
-                    coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=2)
+                    coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=.5)
                     fig, ax = plt.subplots(1,1)#, figsize=(36,6))
                     axes = [ax]
 
@@ -723,8 +743,8 @@ if __name__ == "__main__":
         
         hyper_training_set = hyper_trajectory_data_set_tr
         hyper_testing_set = hyper_trajectory_data_set_te
-        hyper_training_generator = torch.utils.data.DataLoader(hyper_training_set, batch_size = max(32,1), shuffle=True)
-        hyper_testing_generator = torch.utils.data.DataLoader(hyper_testing_set, batch_size = max(32,1))
+        hyper_training_generator = torch.utils.data.DataLoader(hyper_training_set, num_workers = N_WORKERS, batch_size = BATCH_SIZE, shuffle=True)
+        hyper_testing_generator = torch.utils.data.DataLoader(hyper_testing_set, num_workers = N_WORKERS,  batch_size = BATCH_SIZE)
         
         i, (pos, pix) = next(enumerate(hyper_training_generator))
         

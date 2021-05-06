@@ -703,6 +703,7 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
     self.polarfn = polarfn
 
     self.datalength = len(images)
+    self.width = .5
 
 
 
@@ -725,7 +726,7 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
 
 
     #output = (np.expand_dims(Coords2ValueFast(input,self.trajectories,1),0) / 30).astype(np.float32)Coords2ValueFastWS
-    output = ( np.expand_dims(Coords2ValueFastWS(xformed_input,{0:self.trajectories[key]},None,None,2),-1) / self.datascale).astype(np.float32)
+    output = ( np.expand_dims(Coords2ValueFastWS(xformed_input,{0:self.trajectories[key]},None,None,self.width),-1) / self.datascale).astype(np.float32)
     #input = np.expand_dims(input,0)
     
     return {'img_sparse':self.images[key], 'coords':self.recenteringFn(input)}, output#self.recenteringFn(input), output #

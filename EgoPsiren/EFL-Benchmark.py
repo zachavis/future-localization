@@ -130,7 +130,7 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    folder_path = 'S:\\fut_loc\\train\\20150401_walk_00\\'
+    folder_path = 'S:\\fut_loc\\test\\20150402_walk\\'#'S:\\fut_loc\\train\\20150401_walk_00\\'
 
     # load calibration
     print('loading calibration file')
@@ -204,7 +204,7 @@ if __name__ == "__main__":
 
 
     #iFrame = 0
-    for iFrame in range(10,60):
+    for iFrame in range(32,38):
         tr = vTR['vTr'][iFrame]
         if (len(tr['XYZ'][1]) == 0):
             print('SKIPPING FRAME',iFrame,': Trajectory is empty.')
@@ -212,12 +212,18 @@ if __name__ == "__main__":
 
         #im = sprintf('%sim/%s', folder_path, vFilename{iFrame});
         im = "{}im\\{}".format(folder_path, vFilename[iFrame])
+        disp = "{}disparity\\{}{}".format(folder_path, vFilename[iFrame],'.disp.txt')
 
         if not os.path.isfile(im):
             print('could not find file')
             continue
+        if not os.path.isfile(disp):
+            print('could not find file')
+            continue
 
         img = cv2.cvtColor(cv2.imread(im), cv2.COLOR_BGR2RGB).astype(np.float64)/255.0
+
+        disp_img = np.genfromtxt(disp, delimiter=',')[:,:-1] #np.loadtxt(disp, delimiter=',')
         #cv2.imshow('intermediate',intermediate)
         #cv2.waitKey()
 
@@ -239,11 +245,25 @@ if __name__ == "__main__":
         tr_ground = tr_ground[:2] / tr_ground[2]
 
 
+        r_y = -tr['up']/np.linalg.norm(tr['up'])
+        old_r_z = np.array([0,0,1])
+        r_z = old_r_z - (old_r_z@r_y)*r_y
+        r_z /= np.linalg.norm(r_z)
+        r_x = np.cross(r_y, r_z)
+
+        R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
+        
+        homography = K_data @ R_rect_ego @ np.linalg.inv(K_data)
+
+
+
 
         
         # set up egocentric image information in log polar space
+        
+        tr_ground_ALIGNED = R_rect_ego @ tr_ground_OG # ALIGN CAMERA SPACE GROUND PLANE TO "WORLD SPACE"
 
-        t, r = Coord2Polar(tr_ground_OG[2],tr_ground_OG[0])#Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
+        t, r = Coord2Polar(tr_ground_ALIGNED[2],tr_ground_ALIGNED[0])#Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
         logr = np.log(r)
 
         #world_forward = 
@@ -265,24 +285,17 @@ if __name__ == "__main__":
         axes[0].plot(tr_ground[0], tr_ground[1], 'r')
 
 
-        axes[1].set_title('Rectified image')
+        axes[2].set_title('Rectified image')
         #axes[0].set_xlim(*newBoundsx)
         #axes[0].set_ylim(*crowdBoundsY)
         #axes[0].set_aspect(1)
 
         #homography = K_data @ R_rect @ np.linalg.inv(K_data)
         
-        r_y = -tr['up']/np.linalg.norm(tr['up'])
-        old_r_z = np.array([0,0,1])
-        r_z = old_r_z - (old_r_z@r_y)*r_y
-        r_z /= np.linalg.norm(r_z)
-        r_x = np.cross(r_y, r_z)
-
-        R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
-        homography = K_data @ R_rect_ego @ np.linalg.inv(K_data)
+        
 
         img_rectified = cv2.warpPerspective(img, homography, (img.shape[1], img.shape[0]))
-        axes[1].imshow(img_rectified)
+        axes[2].imshow(img_rectified)
         #axes[1].plot(tr_ground[0], tr_ground[1], 'r')
 
 
@@ -345,19 +358,23 @@ if __name__ == "__main__":
         #depth_img = np.clip(depth_img,0,1)
 
         
-        axes[2].set_title('Plane image')
-        axes[2].imshow(rad_img)
+        axes[3].set_title('Plane image')
+        axes[3].imshow(rad_img, cmap='jet')
 
 
         
-        axes[3].set_title('Traj in EgoMap')
-        axes[3].set_xlim((-2*np.pi/3, 2*np.pi/3))
-        #axes[0].set_ylim(*crowdBoundsY)
-        axes[3].set_aspect(1)
-        #axes[1].imshow(img)
+        #axes[3].set_title('Traj in EgoMap')
+        #axes[3].set_xlim((-2*np.pi/3, 2*np.pi/3))
+        ##axes[0].set_ylim(*crowdBoundsY)
+        #axes[3].set_aspect(1)
+        ##axes[1].imshow(img)
 
         
-        axes[3].plot(t, logr, 'r')
+        #axes[3].plot(t, logr, 'r')
+        axes[1].set_title('Depth Image')
+        tempval = axes[1].imshow(disp_img)
+        cax = fig.add_axes([.3, .95, .4, .05])
+        fig.colorbar(tempval, cax, orientation='horizontal')
 
 
         plt.show()
@@ -375,10 +392,10 @@ if __name__ == "__main__":
 
         minR = -.5
         maxR = 5#4.5
-        maxT = 2*np.pi/3
+        maxT = np.pi/3 #2*np.pi/3
         minT = -maxT
 
-        aspect_ratio = (maxT-minT)/(maxR-minR)
+        aspect_ratio = 3/4 #(2*maxT-2*minT)/(maxR-minR)
         ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
         big_ego_pixel_shape = (img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
 
@@ -394,6 +411,11 @@ if __name__ == "__main__":
         big_ego_pix2r = lambda x : RemapRange(x, 0, big_ego_pixel_shape[0], minR,maxR   )
         big_ego_pix2t = lambda x : RemapRange(x,0,big_ego_pixel_shape[1], minT,maxT  )
 
+        
+        big_ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  big_ego_pixel_shape[0]  )
+        big_ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  big_ego_pixel_shape[1]  )
+
+
         RecenterDataForwardWithShape = lambda x, shape : RemapRange(x,0,max(shape[0],shape[1]),-1,1)
         RecenterDataForwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,0,max(shape[0],shape[1]),-scale,scale)
         RecenterDataBackwardWithShape = lambda x, shape : RemapRange(x,-1,1,0,max(shape[0],shape[1]))
@@ -403,6 +425,9 @@ if __name__ == "__main__":
         
         RecenterDataBackwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,-scale,scale,0,max(shape[0],shape[1]))
         RecenterFieldDataBackward = lambda x : RecenterDataBackwardWithShapeAndScale(x,ego_pixel_shape,1)
+
+
+        #RecenterTrajDataBackwardBIG = RecenterDataBackwardWithShapeAndScale()
         
 
         tpix = ego_t2pix(t) #- 15
@@ -419,20 +444,20 @@ if __name__ == "__main__":
 
 
 
-        fig, ax = plt.subplots(1,1)#, figsize=(36,6))
-        axes = [ax]
+        #fig, ax = plt.subplots(1,1)#, figsize=(36,6))
+        #axes = [ax]
 
-        boundsX = (0,ego_pixel_shape[1])
-        boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-        axes[0].set_xlim(*boundsX)
-        axes[0].set_ylim(*boundsY)
-        axes[0].set_aspect(1)
+        #boundsX = (0,ego_pixel_shape[1])
+        #boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+        #axes[0].set_xlim(*boundsX)
+        #axes[0].set_ylim(*boundsY)
+        #axes[0].set_aspect(1)
 
-        for traj in future_trajectory.values():
-            trajnp = np.array(traj)
-            axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
+        #for traj in future_trajectory.values():
+        #    trajnp = np.array(traj)
+        #    axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
         
-        plt.show()
+        #plt.show()
 
 
          #def EgoWarp (img_in, ego_shape, K, R, r_map, t_map,):
@@ -445,24 +470,65 @@ if __name__ == "__main__":
             #def warp_image(img, A, output_size):
         if(True):
             all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(big_ego_pixel_shape[0]) for j in range(big_ego_pixel_shape[1]) ], dtype=np.float32)
+            #all_pixel_coords[:,1] = np.flip(all_pixel_coords[:,1])
+            print(all_pixel_coords[:,0].max())
+            print(all_pixel_coords[:,1].max())
+            print(all_pixel_coords[:,0].min())
+            print(all_pixel_coords[:,1].min())
             ##all_pixel_coords_xformed = np.zeros(all_pixel_coords.shape)
             all_pixel_coords[:,0] = big_ego_pix2t(all_pixel_coords[:,0])
-            all_pixel_coords[:,1] = np.exp(big_ego_pix2r(all_pixel_coords[:,1]))
+            print(all_pixel_coords[:,0].max())
+            print(all_pixel_coords[:,0].min())
+            all_pixel_coords[:,1] = big_ego_pix2r(all_pixel_coords[:,1])
+            print(all_pixel_coords[:,1].max())
+            print(all_pixel_coords[:,1].min())
+            all_pixel_coords[:,1] = np.exp(all_pixel_coords[:,1])
+            print(all_pixel_coords[:,1].max())
+            print(all_pixel_coords[:,1].min())
             z, x = Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
 
             coords_3D = np.zeros((len(z),3))
-            coords_3D[:,0] = -x
-            coords_3D[:,2] = -z
+            coords_3D[:,0] = x
+            coords_3D[:,2] = z
         
-            coords_3D -= tr['up'].T
+            coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+            coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+
+
+            
+            e_origin = tr['up'] #camera assumed to be at 0,0,0
+            #e_origin = np.zeros(3) #zero vector
+
+
             #coords_3D[:,1] *= -1
 
             pixels = K_data @ R_rect @ coords_3D.T
+            pixels /= pixels[2]
             #pixels[:,:] /= pixels[2,:]
 
             rowmaj_pixels = np.zeros(pixels.shape)
             rowmaj_pixels[0] = pixels[1]
             rowmaj_pixels[1] = pixels[0]
+
+
+
+
+
+
+            K_data2 = np.copy(K_data)
+            K_data2[0,2] = disp_img.shape[1]/2
+            K_data2[1,2] = disp_img.shape[0]/2
+
+            
+            K_data2[0,0] = disp_img.shape[1] * K_data[0,0]/img.shape[1]
+            K_data2[1,1] = disp_img.shape[0] * K_data[1,1]/img.shape[0]
+
+            pixels2 = K_data2 @ R_rect @ coords_3D.T
+            pixels2 /= pixels2[2]
+
+            rowmaj_pixels2 = np.zeros(pixels.shape)
+            rowmaj_pixels2[0] = pixels2[1]
+            rowmaj_pixels2[1] = pixels2[0]
 
             #A_aug = np.array([[A[1,1],A[1,0],A[1,2]],[A[0,1],A[0,0],A[0,2]]]) # 2x3 because last row holds no information for affine transform, swapping x and y locations for the interpolation calculation
             #pixRange = range(output_size[0] * output_size[1]) # should reduce the tuple with lambda function
@@ -478,29 +544,42 @@ if __name__ == "__main__":
             #alternate = np.zeros(all_pixel_coords2.shape)
             #alternate[:,0] = all_pixel_coords2[:,1]
             #alternate[:,1] = all_pixel_coords2[:,0]
-            img2 = interpolate.interpn((range(img.shape[0]),range(img.shape[1])),img, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(big_ego_pixel_shape[0], big_ego_pixel_shape[1],3)
+            
+            
+            
+            img2 =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])),          img, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(big_ego_pixel_shape[0], big_ego_pixel_shape[1],3)
+            disp_img2 = interpolate.interpn((range(disp_img.shape[0]),range(disp_img.shape[1])),disp_img, rowmaj_pixels2[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(big_ego_pixel_shape[0], big_ego_pixel_shape[1])
 
 
 
-            #test_t, test_logr  = np.meshgrid(np.linspace(-maxT,maxT,30),np.linspace(0,2,30))
-            #test_t = test_t.flatten()
-            #test_logr = test_logr.flatten()
+            test_t, test_logr  = np.meshgrid(np.linspace(minT,maxT,5),np.linspace(0,5,6))
+            test_t = test_t.flatten()
+            test_logr = test_logr.flatten()
             #print(test_t)
             #print(test_logr)
-            #test_r = np.exp(test_logr)
+            test_r = np.exp(test_logr)
             ##test_t, test_r  = np.meshgrid(np.linspace(-1,1,30),np.linspace(0,2,30))
             ##test_t = test_t.flatten()
             ##test_r = test_r.flatten()
-            #z,x = Polar2Coord(test_t,test_r) # x,z ?
+            z,x = Polar2Coord(test_t,test_r) # x,z ?
             #print(z)
             #print(x)
 
             #print('actual z:', test_r[0], '*', 'np.cos(',test_t[0],') =', test_r[0] * np.cos(test_t[0]))
             #print('actual x:', test_r[0], '*', 'np.sin(',test_t[0],') =', test_r[0] * np.sin(test_t[0]))
 
-            #coords_3D = np.zeros((len(z),3))
-            #coords_3D[:,0] = x
-            #coords_3D[:,2] = z
+            coords_3D = np.zeros((len(z),3))
+            coords_3D[:,0] = x
+            coords_3D[:,2] = z
+            
+            
+            coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+            coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+            
+            pixels = K_data @ R_rect @ coords_3D.T
+            pixels /= pixels[2]
+
+
 
             #xoffset = img.shape[1]
             #x, y  = np.meshgrid(np.linspace(0,30,31),np.linspace(0,30,31)) # pixels
@@ -530,7 +609,7 @@ if __name__ == "__main__":
 
 
 
-            fig, axes = plt.subplots(1,3)#, figsize=(18,6))
+            fig, axes = plt.subplots(1,4)#, figsize=(18,6))
             # axes = [ax] # only use if there's 1 column
 
             #newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
@@ -540,22 +619,82 @@ if __name__ == "__main__":
             #axes[0].set_ylim(*crowdBoundsY)
             #axes[0].set_aspect(1)
             axes[0].imshow(img)
-            axes[0].plot(tr_ground[0], tr_ground[1], 'r')
+            axes[0].plot(tr_ground[0], tr_ground[1], 'ro')
 
         
-            axes[1].set_title('Traj in EgoMap')
-            axes[1].set_xlim((-2*np.pi/3, 2*np.pi/3))
-            #axes[0].set_ylim(*crowdBoundsY)
+            #axes[1].set_title('Traj in EgoMap')
+            #axes[1].set_xlim((-2*np.pi/3, 2*np.pi/3))
+            ##axes[0].set_ylim(*crowdBoundsY)
+            #axes[1].set_aspect(1)
+            ##axes[1].imshow(img)
+        
+        
+            #axes[1].plot(t, logr, 'r')
+        
+            axes[1].set_title('EgoRetinal Map')
+            
+            boundsX = (0,big_ego_pixel_shape[1])
+            boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+            axes[1].set_xlim(*boundsX)
+            axes[1].set_ylim(*boundsY)
             axes[1].set_aspect(1)
-            #axes[1].imshow(img)
-        
-        
-            axes[1].plot(t, logr, 'r')
-        
-            axes[2].set_title('warpd')
-            axes[2].imshow(img2)
+
+            axes[1].imshow(img2)
+
+            
+
+            bigtpix = big_ego_t2pix(t)
+            bigrpix = big_ego_r2pix(logr)
+
+            axes[1].plot(bigtpix,bigrpix, 'ro')
+
+
+            axes[1].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'bo')
+
+
+
+
+
+
+            axes[2].set_title('EgoRetinal Depth Map')
+            
+            boundsX = (0,big_ego_pixel_shape[1])
+            boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+            axes[2].set_xlim(*boundsX)
+            axes[2].set_ylim(*boundsY)
+            axes[2].set_aspect(1)
+
+            tempval = axes[2].imshow(disp_img2)
+            
+            cax = fig.add_axes([.3, .95, .4, .05])
+            fig.colorbar(tempval, cax, orientation='horizontal')
+
+            
+
+            bigtpix = big_ego_t2pix(t)
+            bigrpix = big_ego_r2pix(logr)
+
+            axes[2].plot(bigtpix,bigrpix, 'r')
+
+
+            #axes[2].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'b')
+
+
+
+
+
+            
+            axes[3].set_title('Polar In Image')
+
+            axes[3].imshow(img)
+
+            axes[3].plot(pixels[0,:],pixels[1,:],'bo')
 
             plt.show()
+            figManager = plt.get_current_fig_manager()
+            figManager.window.showMaximized()
             #cv2.imshow('intermediate',intermediate)
             #cv2.waitKey()
 
