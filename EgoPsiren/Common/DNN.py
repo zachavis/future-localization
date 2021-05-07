@@ -920,7 +920,9 @@ def value_mse(model_outputs, coords, gt_value, epoch):
 
 
     #model_outputs = torch.squeeze(model_outputs,-1)
-    value_loss = torch.nn.L1Loss()(model_outputs,gt_value) 
+    #multiplier = torch.zeros(coords.shape)
+    multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+    value_loss = torch.nn.L1Loss()(model_outputs * multiplier, gt_value * multiplier)
     return value_loss
 
 #laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds[0],preds[1], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling

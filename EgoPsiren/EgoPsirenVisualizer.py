@@ -6,6 +6,7 @@ import os
 import matplotlib.pyplot as plt
 import random
 from matplotlib import image
+import matplotlib
 import numpy as np
 from scipy.spatial import cKDTree as KDTree
 import math
@@ -35,7 +36,7 @@ if __name__ == "__main__":
 
     LOAD_NETWORK_FROM_DISK = True    
 
-    network = torch.load('all_imgs_b64_e300.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
+    network = torch.load('overfit_skinny_all_imgs.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
     network.cuda()
     network.eval()
     print("Parameter count:", DNN.CountParameters(network))
@@ -44,7 +45,9 @@ if __name__ == "__main__":
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
     partial_folder_path = 'S:\\fut_loc\\test\\' #20150401_walk_00\\'
-
+    
+    folder_name = '20150402_grocery' #'20150418_mall_00'#'20150401_walk_00'
+    folder_path =  partial_folder_path + folder_name + '\\'
 
 
     # LOADING VARIABLES
@@ -57,14 +60,17 @@ if __name__ == "__main__":
     FILE_UPPER_LIMIT = 1000 # a number larger than the number of images in a single directory, used for dictionary indexing
     count = 0 # folder ID
     n_folders = 17 #15
-    for folder_name in next(os.walk(partial_folder_path))[1]:
-        #if count < 16:
-        #    count += 1
-        #    continue
-        if count >= n_folders:
-            break
+    print(matplotlib.get_backend())
 
-        folder_path =  partial_folder_path + folder_name + '\\'
+    if True:
+    #for folder_name in next(os.walk(partial_folder_path))[1]:
+        ##if count < 16:
+        ##    count += 1
+        ##    continue
+        #if count >= n_folders:
+        #    break
+
+        #folder_path =  partial_folder_path + folder_name + '\\'
 
         # load calibration
         print('loading calibration file')
@@ -169,9 +175,10 @@ if __name__ == "__main__":
 
             #im = im2double(intermediate); % im2double(imread(im));
 
-            tr_ground = (tr['XYZ'].T - tr['up']).T #bsxfun(@minus, tr['XYZ'], tr['up']);
-            t, r = DataReader.Coord2Polar(tr_ground[2],tr_ground[0])
-            tr_ground = K_data @ R_rect @ tr_ground;
+            tr_ground_OG = (tr['XYZ'].T - tr['up']).T #bsxfun(@minus, tr['XYZ'], tr['up']);
+
+            #t, r = DataReader.Coord2Polar(tr_ground[2],tr_ground[0])
+            tr_ground = K_data @ R_rect @ tr_ground_OG;
             if np.any(tr_ground[2,:]<0):
                 #tr_ground[:2,:] = np.nan # actually maybe I shouldn't NAN here, the only issue is that the trajectory goes behind the camera. Maybe that's okay?
                 print('\tThe trajectory is suspicious, and may be behind the user. SKIPPING')
@@ -192,23 +199,16 @@ if __name__ == "__main__":
 
 
             
-            img_height = 64
+            img_height = 128
 
             minR = -.5
             maxR = 5#4.5
-            minT = -2*np.pi/3
-            maxT = 2*np.pi/3
+            minT = -np.pi/3
+            maxT = -minT#2*np.pi/3
 
 
 
 
-
-            test = r < np.exp(minR)
-            if (np.any(r < np.exp(minR))):
-                print('\tTrajectory is too close to camera origin.')
-                continue
-                #print('')
-            logr = np.log(r)
 
             #world_forward = 
 
@@ -219,6 +219,22 @@ if __name__ == "__main__":
             r_x = np.cross(r_y, r_z)
 
             R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
+
+
+            
+            tr_ground_ALIGNED = R_rect_ego @ tr_ground_OG # ALIGN CAMERA SPACE GROUND PLANE TO "WORLD SPACE"
+            t, r = Coord2Polar(tr_ground_ALIGNED[2],tr_ground_ALIGNED[0])#Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
+
+
+
+            test = r < np.exp(minR)
+            if (np.any(r < np.exp(minR))):
+                print('\tTrajectory is too close to camera origin.')
+                continue
+                #print('')
+            logr = np.log(r)
+
+
             homography = K_data @ R_rect_ego @ np.linalg.inv(K_data)
 
             img_rectified = cv2.warpPerspective(img*2.0-1.0, homography, (img.shape[1], img.shape[0])) # want to shift the values here so that the normalized version has black in the rectified location
@@ -290,7 +306,7 @@ if __name__ == "__main__":
 
 
 
-            aspect_ratio = (maxT-minT)/(maxR-minR)
+            aspect_ratio = 3/4#(maxT-minT)/(maxR-minR)
             ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
 
             ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
@@ -463,7 +479,7 @@ if __name__ == "__main__":
             #coord_value = DataGens.Coords2ValueFast(all_pixel_coords,future_trajectory,nscale=1)
 
             if (PRINT_DEBUG_IMAGES):
-                coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=2)
+                coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
                 fig, ax = plt.subplots(1,1)#, figsize=(36,6))
                 axes = [ax]
 
@@ -516,7 +532,7 @@ if __name__ == "__main__":
             all_pixel_coords_xformed[:,1] = np.exp(ego_pix2r(all_pixel_coords[:,1]))
             all_pixel_coords_xformed = np.array(DataReader.Polar2Coord(all_pixel_coords_xformed[:,0],all_pixel_coords_xformed[:,1])).T
 
-            test_coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=2)
+            test_coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
 
             test_image_prediction = torch.from_numpy( np.expand_dims(test_image,0) )
 
@@ -710,6 +726,6 @@ if __name__ == "__main__":
 
             #axes[1,0].imshow(a_star_map_x, extent=[*boundsX, *boundsY], interpolation='none')
             #axes[1,1].imshow(a_star_map_y, extent=[*boundsX, *boundsY], interpolation='none')
-
-            
+            figManager = plt.get_current_fig_manager()
+            figManager.window.showMaximized()
             plt.show()

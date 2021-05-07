@@ -157,8 +157,8 @@ LOAD_NETWORK_FROM_DISK = False
 if __name__ == "__main__":
     #DNN.current_epoch = 0
 
-    BATCH_SIZE = 64
-    N_WORKERS = 4
+    BATCH_SIZE = 16
+    N_WORKERS = 0
 
 
     # FORNOW: Just going to assume it's only in train mode
@@ -723,7 +723,7 @@ if __name__ == "__main__":
 
 
         #Training parameters
-        num_epochs = 2 #15000 #1000
+        num_epochs = 20 #15000 #1000
         print_interval = 1
         learning_rate = 5e-5#1e-5
         #loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()
