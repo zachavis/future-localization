@@ -253,7 +253,8 @@ if __name__ == "__main__":
 
         R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
         
-        homography = K_data @ R_rect_ego @ np.linalg.inv(K_data)
+        # TODO: does R_rect need to be here?
+        homography = K_data @ R_rect @ R_rect_ego  @ R_rect.T @ np.linalg.inv(K_data)
 
 
 
@@ -388,16 +389,16 @@ if __name__ == "__main__":
 
 
 
-        img_height = 64
+        img_height = 196
 
         minR = -.5
-        maxR = 5#4.5
+        maxR = 4#4.5
         maxT = np.pi/3 #2*np.pi/3
         minT = -maxT
 
         aspect_ratio = 3/4 #(2*maxT-2*minT)/(maxR-minR)
         ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
-        big_ego_pixel_shape = (img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
+        big_ego_pixel_shape = ego_pixel_shape#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
 
         ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
         ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[1]  )
@@ -469,6 +470,24 @@ if __name__ == "__main__":
 
             #def warp_image(img, A, output_size):
         if(True):
+
+
+            #def GenEgoRetinalMap(in_img, out_img_shape, pix2t, pix2r, R_Cam2World, V_Floor2Cam, ):
+
+            #    all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(out_img_shape[0]) for j in range(out_img_shape[1]) ], dtype=np.float32)
+            #    all_pixel_coords[:,0] = big_ego_pix2t(all_pixel_coords[:,0])
+            #    all_pixel_coords[:,1] =  np.exp(big_ego_pix2r(all_pixel_coords[:,1]))
+            #    z, x = Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
+            #    coords_3D = np.zeros((len(z),3))
+            #    coords_3D[:,0] = x
+            #    coords_3D[:,2] = z
+        
+            #    coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+            #    coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+
+
+
+
             all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(big_ego_pixel_shape[0]) for j in range(big_ego_pixel_shape[1]) ], dtype=np.float32)
             #all_pixel_coords[:,1] = np.flip(all_pixel_coords[:,1])
             print(all_pixel_coords[:,0].max())
@@ -511,7 +530,7 @@ if __name__ == "__main__":
             rowmaj_pixels[1] = pixels[0]
 
 
-
+            img2 =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])),          img, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(big_ego_pixel_shape[0], big_ego_pixel_shape[1],3)
 
 
 
@@ -547,7 +566,7 @@ if __name__ == "__main__":
             
             
             
-            img2 =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])),          img, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(big_ego_pixel_shape[0], big_ego_pixel_shape[1],3)
+            
             disp_img2 = interpolate.interpn((range(disp_img.shape[0]),range(disp_img.shape[1])),disp_img, rowmaj_pixels2[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(big_ego_pixel_shape[0], big_ego_pixel_shape[1])
 
 
@@ -657,7 +676,7 @@ if __name__ == "__main__":
 
 
 
-            axes[2].set_title('EgoRetinal Depth Map')
+            axes[2].set_title('EgoRetinal Disparity Map')
             
             boundsX = (0,big_ego_pixel_shape[1])
             boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #

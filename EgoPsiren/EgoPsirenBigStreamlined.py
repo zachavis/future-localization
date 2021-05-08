@@ -159,6 +159,19 @@ if __name__ == "__main__":
 
     BATCH_SIZE = 16
     N_WORKERS = 0
+    
+    # TODO put these values in a settings file on disk to force uniformity across programs
+    img_height = 196#128#64
+
+    minR = -.5
+    maxR = 4#5 #4.5
+    minT = -np.pi/3 #-2*np.pi/3
+    maxT = -minT #2*np.pi/3
+    aspect_ratio = 3/4 #2*#(maxT-minT)/(maxR-minR)
+    ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
+    
+    FILE_UPPER_LIMIT = 1000 # a number larger than the number of images in a single directory, used for dictionary indexing
+    n_folders = 2
 
 
     # FORNOW: Just going to assume it's only in train mode
@@ -261,8 +274,6 @@ if __name__ == "__main__":
     TRAJ_IN_IMAGE_DICTIONARY_TR = {}
 
 
-    FILE_UPPER_LIMIT = 1000 # a number larger than the number of images in a single directory, used for dictionary indexing
-    n_folders = 2
     #data_subdirectories = [x for x in partial_folder_path.iterdir() if x.is_dir()]
     #data_subdirectories_test = data_subdirectories[-4:]
 
@@ -431,14 +442,6 @@ if __name__ == "__main__":
 
                 # set up egocentric image information in log polar space
 
-                # TODO put these values in a settings file on disk to force uniformity across programs
-                img_height = 128#64
-
-                minR = -.5
-                maxR = 5 #4.5
-                minT = -np.pi/3 #-2*np.pi/3
-                maxT = -minT #2*np.pi/3
-
 
                 
 
@@ -470,20 +473,120 @@ if __name__ == "__main__":
 
 
 
-                homography = K_data @ R_rect_ego @ np.linalg.inv(K_data)
+                #homography = K_data @ R_rect @ R_rect_ego @ R_rect.T @ np.linalg.inv(K_data)
 
-                img_rectified = cv2.warpPerspective(img*2.0-1.0, homography, (img.shape[1], img.shape[0])) # want to shift the values here so that the normalized version has black in the rectified location
+                #img_rectified = cv2.warpPerspective(img*2.0-1.0, homography, (img.shape[1], img.shape[0])) # want to shift the values here so that the normalized version has black in the rectified location
 
        
 
-                img_resized = cv2.resize(img_rectified, (int(img_rectified.shape[1]*imageScale), int(img_rectified.shape[0]*imageScale)))
+                #img_resized = cv2.resize(img_rectified, (int(img_rectified.shape[1]*imageScale), int(img_rectified.shape[0]*imageScale)))
+                #img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
+                ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[1]  )
+
+        
+                ego_pix2r = lambda x : RemapRange(x, 0, ego_pixel_shape[0], minR,maxR   )
+                ego_pix2t = lambda x : RemapRange(x,0,ego_pixel_shape[1], minT,maxT  )
+
+                RecenterDataForwardWithShape = lambda x, shape : RemapRange(x,0,max(shape[0],shape[1]),-1,1)
+                RecenterDataForwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,0,max(shape[0],shape[1]),-scale,scale)
+                RecenterDataBackwardWithShape = lambda x, shape : RemapRange(x,-1,1,0,max(shape[0],shape[1]))
+                RecenterTrajDataForward = lambda x : RecenterDataForwardWithShape(x,ego_pixel_shape)
+                RecenterTrajDataForward2 = lambda x : RecenterDataForwardWithShapeAndScale(x,ego_pixel_shape,1)
+
+        
+                RecenterDataBackwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,-scale,scale,0,max(shape[0],shape[1]))
+                RecenterFieldDataBackward = lambda x : RecenterDataBackwardWithShapeAndScale(x,ego_pixel_shape,1)
+        
+
+                tpix = ego_t2pix(t)
+                logrpix = ego_r2pix(logr)
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+                # Generating EgoRetinalMap
+
+                all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ], dtype=np.float32)
+                all_pixel_coords[:,0] = ego_pix2t(all_pixel_coords[:,0])
+                all_pixel_coords[:,1] = ego_pix2r(all_pixel_coords[:,1])
+                all_pixel_coords[:,1] = np.exp(all_pixel_coords[:,1])
+                z, x = Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
+
+                coords_3D = np.zeros((len(z),3))
+                coords_3D[:,0] = x
+                coords_3D[:,2] = z
+        
+                coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+                coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+
+
+                #coords_3D[:,1] *= -1
+
+                pixels = K_data @ R_rect @ coords_3D.T
+                pixels /= pixels[2]
+                #pixels[:,:] /= pixels[2,:]
+
+                rowmaj_pixels = np.zeros(pixels.shape)
+                rowmaj_pixels[0] = pixels[1]
+                rowmaj_pixels[1] = pixels[0]
+
+
+                img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1],3)
                 img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
+
+
+
+
+
+
+
+
+
+
+
+
+
          
                 if (PRINT_DEBUG_IMAGES):
-                    fig, axes = plt.subplots(1,3)#, figsize=(18,6))
+                    fig, axes = plt.subplots(1,2)#, figsize=(18,6))
                     axes[0].imshow(img)
-                    axes[1].imshow(img_rectified)
-                    axes[2].imshow(img_resized)
+                    #axes[1].imshow(img_rectified)
+                    boundsX = (0,ego_pixel_shape[1])
+                    boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+                    axes[1].set_xlim(*boundsX)
+                    axes[1].set_ylim(*boundsY)
+                    axes[1].set_aspect(1)
+                    axes[1].imshow(img_resized)
                     plt.show()
 
                 # DISPLAY IMAGES
@@ -532,29 +635,17 @@ if __name__ == "__main__":
 
 
 
-                aspect_ratio = 3/4 #2*#(maxT-minT)/(maxR-minR)
-                ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
 
-                ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
-                ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[1]  )
 
-        
-                ego_pix2r = lambda x : RemapRange(x, 0, ego_pixel_shape[0], minR,maxR   )
-                ego_pix2t = lambda x : RemapRange(x,0,ego_pixel_shape[1], minT,maxT  )
 
-                RecenterDataForwardWithShape = lambda x, shape : RemapRange(x,0,max(shape[0],shape[1]),-1,1)
-                RecenterDataForwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,0,max(shape[0],shape[1]),-scale,scale)
-                RecenterDataBackwardWithShape = lambda x, shape : RemapRange(x,-1,1,0,max(shape[0],shape[1]))
-                RecenterTrajDataForward = lambda x : RecenterDataForwardWithShape(x,ego_pixel_shape)
-                RecenterTrajDataForward2 = lambda x : RecenterDataForwardWithShapeAndScale(x,ego_pixel_shape,1)
 
-        
-                RecenterDataBackwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,-scale,scale,0,max(shape[0],shape[1]))
-                RecenterFieldDataBackward = lambda x : RecenterDataBackwardWithShapeAndScale(x,ego_pixel_shape,1)
-        
 
-                tpix = ego_t2pix(t)
-                logrpix = ego_r2pix(logr)
+
+
+
+
+
+
 
                 #future_trajectory = {}
 
@@ -795,6 +886,16 @@ if __name__ == "__main__":
         #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)
         #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)#,type='relu')
         network = testModel# predModel#
+        
+        if torch.cuda.device_count() > 1:
+            print("Utilizing {} GPUs.".format(torch.cuda.device_count()))
+            network = torch.nn.DataParallel(network)
+
+
+
+        # TODO: Allow flexibility for running code on systems without GPU 
+        # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        # x = x.to(device)
 
         network.cuda()
         network.eval()
