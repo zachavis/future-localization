@@ -171,7 +171,7 @@ if __name__ == "__main__":
     ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
     
     FILE_UPPER_LIMIT = 1000 # a number larger than the number of images in a single directory, used for dictionary indexing
-    n_folders = 2
+    n_folders = 1
 
 
     # FORNOW: Just going to assume it's only in train mode
@@ -875,10 +875,11 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
         #loss_function = nn.MSELoss()
         #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
-        testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
         testModel.cuda()
         testModel.eval()
-        testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,*img_channel_swap.shape)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
+        #testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,*img_channel_swap.shape)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
+        
         #testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,1,32,32)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
         #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=64,num_hidden_layers=3) #Last used
         #network = predModel#testModel#

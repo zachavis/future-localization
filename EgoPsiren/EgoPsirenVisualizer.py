@@ -36,7 +36,9 @@ if __name__ == "__main__":
 
     LOAD_NETWORK_FROM_DISK = True    
 
-    network = torch.load('overfit_skinny_all_imgs.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
+    intermediate = torch.load('overfit_ego_map_all_imgs.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
+    #test = network.module.state_dict()
+    network = intermediate.module
     network.cuda()
     network.eval()
     print("Parameter count:", DNN.CountParameters(network))
@@ -46,7 +48,7 @@ if __name__ == "__main__":
 
     partial_folder_path = 'S:\\fut_loc\\test\\' #20150401_walk_00\\'
     
-    folder_name = '20150402_grocery' #'20150418_mall_00'#'20150401_walk_00'
+    folder_name = '20150402_grocery' #'20150418_mall_00' # '20150401_walk_00' # 
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -199,12 +201,12 @@ if __name__ == "__main__":
 
 
             
-            img_height = 128
+            img_height = 196 #128
 
             minR = -.5
-            maxR = 5#4.5
+            maxR = 4 #5#4.5
             minT = -np.pi/3
-            maxT = -minT#2*np.pi/3
+            maxT = -minT #2*np.pi/3
 
 
 
@@ -234,24 +236,20 @@ if __name__ == "__main__":
                 #print('')
             logr = np.log(r)
 
+            # TODO: R_rect makes sense right?
+            #homography = K_data @ R_rect @ R_rect_ego @ R_rect.T @ np.linalg.inv(K_data)
 
-            homography = K_data @ R_rect_ego @ np.linalg.inv(K_data)
-
-            img_rectified = cv2.warpPerspective(img*2.0-1.0, homography, (img.shape[1], img.shape[0])) # want to shift the values here so that the normalized version has black in the rectified location
+            #img_rectified = cv2.warpPerspective(img*2.0-1.0, homography, (img.shape[1], img.shape[0])) # want to shift the values here so that the normalized version has black in the rectified location
 
        
 
-            img_resized = cv2.resize(img_rectified, (int(img_rectified.shape[1]*imageScale), int(img_rectified.shape[0]*imageScale)))
-            img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
-         
-            if (PRINT_DEBUG_IMAGES):
-                fig, axes = plt.subplots(1,3)#, figsize=(18,6))
-                axes[0].imshow(img)
-                axes[1].imshow(img_rectified)
-                axes[2].imshow(img_resized)
-                plt.show()
+            #img_resized = cv2.resize(img_rectified, (int(img_rectified.shape[1]*imageScale), int(img_rectified.shape[0]*imageScale)))
+            #img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
 
 
+
+
+            
 
 
 
@@ -330,6 +328,76 @@ if __name__ == "__main__":
             tpix = ego_t2pix(t)
             logrpix = ego_r2pix(logr)
 
+
+
+
+
+            # Generating EgoRetinalMap
+
+            all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ], dtype=np.float32)
+            all_pixel_coords[:,0] = ego_pix2t(all_pixel_coords[:,0])
+            all_pixel_coords[:,1] = ego_pix2r(all_pixel_coords[:,1])
+            all_pixel_coords[:,1] = np.exp(all_pixel_coords[:,1])
+            z, x = DataReader.Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
+
+            coords_3D = np.zeros((len(z),3))
+            coords_3D[:,0] = x
+            coords_3D[:,2] = z
+        
+            coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+            coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+
+
+            #coords_3D[:,1] *= -1
+
+            pixels = K_data @ R_rect @ coords_3D.T
+            pixels /= pixels[2]
+            #pixels[:,:] /= pixels[2,:]
+
+            rowmaj_pixels = np.zeros(pixels.shape)
+            rowmaj_pixels[0] = pixels[1]
+            rowmaj_pixels[1] = pixels[0]
+
+
+            img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1],3)
+            img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
+
+
+
+
+         
+            if (PRINT_DEBUG_IMAGES):
+                fig, axes = plt.subplots(1,2)#, figsize=(18,6))
+                axes[0].imshow(img)
+                #axes[1].imshow(img_rectified)
+                #axes[1].imshow(img_resized)
+                boundsX = (0,ego_pixel_shape[1])
+                boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+                axes[1].set_xlim(*boundsX)
+                axes[1].set_ylim(*boundsY)
+                axes[1].set_aspect(1)
+                axes[1].imshow(img_resized)
+                plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             #future_trajectory = {}
 
             #for k in range(1):
@@ -375,10 +443,10 @@ if __name__ == "__main__":
                 return t
         
 
-            depth_img = np.zeros(img_rectified.shape[:2])
+            depth_img = np.zeros(img.shape[:2])
 
         
-            depth_pixel_coords = np.array( [ [j+.5,i+.5,1.0] for i in range(img_rectified.shape[0]) for j in range(img_rectified.shape[1]) ], dtype=np.float32)
+            depth_pixel_coords = np.array( [ [j+.5,i+.5,1.0] for i in range(img.shape[0]) for j in range(img.shape[1]) ], dtype=np.float32)
 
             #pixel = np.array([j,i,1])
             p_normal = -tr['up']/np.linalg.norm(tr['up'])
@@ -535,7 +603,7 @@ if __name__ == "__main__":
             test_coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
 
             test_image_prediction = torch.from_numpy( np.expand_dims(test_image,0) )
-
+            print(test_image_prediction.device)
 
             network.cpu()
 
@@ -686,6 +754,11 @@ if __name__ == "__main__":
                 axes[0].plot(raw_trajectory[0], raw_trajectory[1], 'r')
         
             axes[0+load_offset].set_title('Input Image (Unnormalized)')
+            boundsX = (0,ego_pixel_shape[1])
+            boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+            axes[0+load_offset].set_xlim(*boundsX)
+            axes[0+load_offset].set_ylim(*boundsY)
             axes[0+load_offset].set_aspect(1)
             axes[0+load_offset].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
         

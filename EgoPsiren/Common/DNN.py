@@ -168,6 +168,44 @@ class ConvImgEncoder(nn.Module):
         o = self.fc(intermediate).squeeze(-1)
         return o
 
+
+class ConvImgIntensity(nn.Module):
+    def __init__(self, channel, image_resolution, latent_dimension = 256):
+        super().__init__()
+        self.sub_latent_dimension = latent_dimension//2
+
+        # conv_theta is input convolution
+        self.conv_theta = nn.Conv2d(channel, self.sub_latent_dimension, 21, 1, 21//2)
+        self.relu = nn.ReLU(inplace=True)
+        self.latent_dimension = latent_dimension
+        self.sig = nn.Sigmoid()
+
+        self.cnn = nn.Sequential(
+            nn.Conv2d(self.sub_latent_dimension, self.latent_dimension, 3, 1, 1),
+            nn.ReLU(),
+            Conv2dResBlock(self.latent_dimension, self.latent_dimension),
+            #Conv2dResBlock(256, 256),
+            #Conv2dResBlock(256, 256),
+            #Conv2dResBlock(256, 256),
+            nn.Conv2d(self.latent_dimension, 1, 1, 1, 0)
+        )
+
+        self.relu_2 = nn.ReLU(inplace=True)
+
+        fc_dim = image_resolution[0] * image_resolution[1]
+        self.fc = nn.Linear(fc_dim, 1) #TODO: Why 1??
+
+        self.image_resolution = image_resolution
+
+    def forward(self, I):
+        o = self.relu(self.conv_theta(I))
+        o = self.cnn(o)
+        o = self.sig(o)
+        #intermediate = self.relu_2(o).view(o.shape[0], self.latent_dimension, -1)
+        #o = self.fc(intermediate).squeeze(-1)
+        return o
+
+
 class Conv2dResBlock(nn.Module):
     '''Aadapted from https://github.com/makora9143/pytorch-convcnp/blob/master/convcnp/modules/resblock.py'''
     def __init__(self, in_channel, out_channel=128):
@@ -598,6 +636,58 @@ class ConvolutionalNeuralProcessImplicit2DHypernet(nn.Module):
 
         return {'model_in': model_output['model_in'], 'model_out': model_output['model_out'], 'latent_vec': embedding,
                 'hypo_params': hypo_params}
+
+    def get_hypo_net_weights(self, model_input):
+        embedding = self.encoder(model_input['img_sparse'])
+        hypo_params = self.hyper_net(embedding)
+        return hypo_params, embedding
+
+    def freeze_hypernet(self):
+        for param in self.hyper_net.parameters():
+            param.requires_grad = False
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+
+
+
+class ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(nn.Module):
+    def __init__(self, in_features, out_features, image_resolution=None, partial_conv=False):
+        super().__init__()
+        latent_dim = LATENT_DIMENSION
+
+        if partial_conv:
+            self.encoder = PartialConvImgEncoder(channel=in_features, image_resolution=image_resolution)
+        else:
+            self.encoder = ConvImgEncoder(channel=in_features, image_resolution=image_resolution, latent_dimension = latent_dim)
+        
+        self.hypo_net = SirenMM(in_features=2,out_features=out_features,num_hidden_layers=3,hidden_features=32,outermost_linear=True,nonlinearity='sine')  #Siren(in_features=2, out_features=out_features, #modules.SingleBVPNet(out_features=out_features, type='sine', sidelength=image_resolution, in_features=2)
+        
+        self.hyper_net = HyperNetwork(hyper_in_features=latent_dim, hyper_hidden_layers=1, hyper_hidden_features=256,
+                                      hypo_module=self.hypo_net)
+
+        self.multiplier_net = ConvImgIntensity(channel=in_features, image_resolution=image_resolution, latent_dimension = latent_dim)
+
+        print(self)
+
+    def forward(self, model_input):
+        if model_input.get('embedding', None) is None:
+            embedding = self.encoder(model_input['img_sparse'])
+        else:
+            embedding = model_input['embedding']
+        hypo_params = self.hyper_net(embedding)
+
+        siren_output = self.hypo_net(model_input, params=hypo_params)
+
+        intensity = self.multiplier_net(model_input['img_sparse'])
+        intensity = torch.flatten(intensity,start_dim=2)
+        intensity = torch.transpose(intensity,1,2)
+
+        model_output = siren_output['model_out'] * intensity
+
+
+
+        return {'model_in': siren_output['model_in'], 'model_out':model_output, 'siren_out': siren_output['model_out'], 'latent_vec': embedding,
+                'hypo_params': hypo_params, 'intensity': intensity}
 
     def get_hypo_net_weights(self, model_input):
         embedding = self.encoder(model_input['img_sparse'])

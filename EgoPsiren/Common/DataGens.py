@@ -684,7 +684,7 @@ class HyperTrajectoryDataset2(torch.utils.data.Dataset):
 
 class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
   'Characterizes a dataset for PyTorch'
-  def __init__(self, trajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
+  def __init__(self, trajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
     'Initialization'
     
     self.trajectories = trajectories
@@ -704,6 +704,7 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
 
     self.datalength = len(images)
     self.width = .5
+    self.random = random
 
 
 
@@ -714,10 +715,12 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
   def GetImageTrajectoryPair(self,index):
       
     key = list(self.images.keys())[index]
-
-    input = self.uncenteringFn((np.random.rand(self.totalpoints,2)*2.0-1.0).astype(np.float32))
+    
+    if self.random:
+        input = self.uncenteringFn((np.random.rand(self.totalpoints,2)*2.0-1.0).astype(np.float32))
+    else:
     #random_choice = np.random.choice(len(self.img_points), size=150, replace=False)
-    #input = np.copy(self.img_points)
+        input = np.copy(self.img_points)
     xformed_input = np.zeros(input.shape)
     xformed_input[:,0] = self.pix2tfn(input[:,0])
     xformed_input[:,1] = np.exp(self.pix2rfn(input[:,1]))
