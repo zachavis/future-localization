@@ -30,15 +30,18 @@ from scipy import stats
 
 PRINT_DEBUG_IMAGES = False
 LOAD_NETWORK_FROM_DISK = True
+USE_INTENSITY = True
+SHOW_INTENSITY = True
 if __name__ == "__main__":
     #DNN.current_epoch = 0
 
 
     LOAD_NETWORK_FROM_DISK = True    
 
-    intermediate = torch.load('overfit_ego_map_all_imgs.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
+    network = torch.load('overfit_ego_with_intensity.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
     #test = network.module.state_dict()
-    network = intermediate.module
+    if type(network) == torch.nn.DataParallel:
+        network = network.module
     network.cuda()
     network.eval()
     print("Parameter count:", DNN.CountParameters(network))
@@ -48,7 +51,7 @@ if __name__ == "__main__":
 
     partial_folder_path = 'S:\\fut_loc\\test\\' #20150401_walk_00\\'
     
-    folder_name = '20150402_grocery' #'20150418_mall_00' # '20150401_walk_00' # 
+    folder_name =  '20150402_grocery' #'20150418_mall_00' # '20150401_walk_00' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -470,9 +473,9 @@ if __name__ == "__main__":
             image_siren_depths[logr_im < minR] = 0
             image_siren_depths[logr_im > maxR] = 0
 
-            image_siren_coords = np.stack( (ego_t2pix(t_im), ego_r2pix(logr_im)), axis = 0)
+            image_siren_pix_coords = np.stack( (ego_t2pix(t_im), ego_r2pix(logr_im)), axis = 0)
 
-            image_siren_coords = RecenterTrajDataForward(image_siren_coords).astype(np.float32).T
+            image_siren_coords = RecenterTrajDataForward(image_siren_pix_coords).astype(np.float32).T
 
             #print(r2.max())
             #r2 = np.clip(r2,0,100)
@@ -607,22 +610,23 @@ if __name__ == "__main__":
 
             network.cpu()
 
-            image_siren_coords_tensor = torch.unsqueeze( torch.from_numpy(image_siren_coords), 0)
-            image_siren_predictions = network({'coords':image_siren_coords_tensor,'img_sparse':test_image_prediction})
-            image_siren_image = (image_siren_predictions['model_out'], image_siren_predictions['model_in'])
-            image_siren_image = image_siren_image[0].cpu().view(raw_image.shape[:2]).detach().numpy()
-            image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
-            image_siren_alpha[image_siren_alpha > 0.001] = .7
-            #image_siren_image_rgba = np.dstack((image_siren_image, image_siren_image, image_siren_image, image_siren_alpha))
-            #print('testingggg',image_siren_image.max())
-            #print(image_siren_alpha.max())
-            #rgb_img = np.dstack((grayscale, grayscale, grayscale, alpha))
+            if not USE_INTENSITY:
+                image_siren_coords_tensor = torch.unsqueeze( torch.from_numpy(image_siren_coords), 0)
+                image_siren_predictions = network({'coords':image_siren_coords_tensor,'img_sparse':test_image_prediction})
+                image_siren_image = (image_siren_predictions['model_out'], image_siren_predictions['model_in'])
+                image_siren_image = image_siren_image[0].cpu().view(raw_image.shape[:2]).detach().numpy()
+                image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
+                image_siren_alpha[image_siren_alpha > 0.001] = .7
+                #image_siren_image_rgba = np.dstack((image_siren_image, image_siren_image, image_siren_image, image_siren_alpha))
+                #print('testingggg',image_siren_image.max())
+                #print(image_siren_alpha.max())
+                #rgb_img = np.dstack((grayscale, grayscale, grayscale, alpha))
 
-            #torch.no_grad()
-            # Is y x okay or should we do x y
-            dense_scale = 1
-            dense_coords = np.array( [[ [RecenterTrajDataForward((j+.5)/dense_scale),RecenterTrajDataForward((i+.5)/dense_scale)] for i in range(ego_pixel_shape[0]*dense_scale) for j in range(ego_pixel_shape[1]*dense_scale) ]], dtype=np.float32)
-            dense_coords = torch.unsqueeze( torch.from_numpy(dense_coords), 0)
+                #torch.no_grad()
+                # Is y x okay or should we do x y
+                dense_scale = 1
+                dense_coords = np.array( [[ [RecenterTrajDataForward((j+.5)/dense_scale),RecenterTrajDataForward((i+.5)/dense_scale)] for i in range(ego_pixel_shape[0]*dense_scale) for j in range(ego_pixel_shape[1]*dense_scale) ]], dtype=np.float32)
+                dense_coords = torch.unsqueeze( torch.from_numpy(dense_coords), 0)
 
             all_coords = np.array( [[ [RecenterTrajDataForward(j+.5),RecenterTrajDataForward(i+.5)] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ]], dtype=np.float32)
             all_coords = torch.unsqueeze( torch.from_numpy(all_coords), 0)
@@ -663,6 +667,21 @@ if __name__ == "__main__":
 
             #axes[0].imshow(-outImage[0].cpu().view(ego_pixel_shape).detach().numpy(), extent=[*(minT,maxT), *(minR,maxR)], interpolation='none')#, cmap='gnuplot')
             outImagea = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
+
+
+            
+            if USE_INTENSITY:
+                image_siren_image = interpolate.interpn((range(outImagea.shape[0]),range(outImagea.shape[1])), outImagea, image_siren_pix_coords[[1,0]].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(img.shape[0], img.shape[1])
+                image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
+                image_siren_alpha[image_siren_alpha > 0.001] = .7
+
+                intensity_map = predictions['intensity'].cpu().view(ego_pixel_shape).detach().numpy()
+
+
+
+
+
+
             if showHistogram:
                 tempval = axes[0].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
                 axes[1].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
@@ -675,18 +694,19 @@ if __name__ == "__main__":
                 outImage = predictions
             outImageA = -DNN.gradient(*outImage)#-DNN.gradient(*predModel(outImage[1]))
         
-            predictions = network({'coords':dense_coords,'img_sparse':test_image_prediction})
-            if type(predictions) is dict:
-                outImage = (predictions['model_out'], predictions['model_in'])
-            else:
-                outImage = predictions
-            laplacianA = np.squeeze(DNN.laplace(*outImage).detach().numpy())
+            if not USE_INTENSITY:
+                predictions = network({'coords':dense_coords,'img_sparse':test_image_prediction})
+                if type(predictions) is dict:
+                    outImage = (predictions['model_out'], predictions['model_in'])
+                else:
+                    outImage = predictions
+                laplacianA = np.squeeze(DNN.laplace(*outImage).detach().numpy())
 
             outImageA = outImageA[0].cpu().view(*ego_pixel_shape,2).detach().numpy() 
             print(outImageA.shape)
 
             # HISTOGRAM
-            if showHistogram:
+            if showHistogram and not USE_INTENSITY:
                 fig2, ax2 = plt.subplots(1,1)
                 ax2.set_title('Histogram of Laplacians')
                 ax2.hist(laplacianA, bins=2000)
@@ -734,6 +754,7 @@ if __name__ == "__main__":
 
 
             load_offset = 1 if LOAD_NETWORK_FROM_DISK else 0
+            load_offset += 1 if USE_INTENSITY else 0
             fig, axes = plt.subplots(1,3 + load_offset)
             fig.suptitle('Comparison of Network Output with Ground Truth')
             trajnp = np.array(test_pix_trajectory)
@@ -752,6 +773,14 @@ if __name__ == "__main__":
                 #axes[1].set_aspect(1)
                 axes[0].imshow(image_siren_image, alpha=image_siren_alpha)
                 axes[0].plot(raw_trajectory[0], raw_trajectory[1], 'r')
+                
+            if USE_INTENSITY:
+                axes[1].set_title('Intensity Mask')
+                axes[1].set_xlim(*boundsX)
+                axes[1].set_ylim(*boundsY)
+                axes[1].set_aspect(1)
+                axes[1].imshow(intensity_map, cmap='plasma')
+                #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
         
             axes[0+load_offset].set_title('Input Image (Unnormalized)')
             boundsX = (0,ego_pixel_shape[1])
@@ -761,6 +790,10 @@ if __name__ == "__main__":
             axes[0+load_offset].set_ylim(*boundsY)
             axes[0+load_offset].set_aspect(1)
             axes[0+load_offset].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
+            if USE_INTENSITY:
+                axes[0+load_offset].imshow(intensity_map, alpha=.30, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
+
+
         
             axes[1+load_offset].set_title('Network with GT Traj')
             axes[1+load_offset].set_xlim(*boundsX)

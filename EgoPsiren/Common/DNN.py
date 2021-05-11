@@ -871,18 +871,22 @@ def logResults(epoch, num_epochs, train_loss, train_loss_history, test_loss, tes
   epoch_counter.append(epoch)
 
 
-def trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, num_epochs, learning_rate, output_path, logging_rate=1, train = train, test = test_with_grad, graph = True):
+def trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, num_epochs, learning_rate, output_path, overfit_output_path, logging_rate=1, train = train, test = test_with_grad, graph = True):
   
   #print('training and graphing')
   #Arrays to store training history
   test_loss_history = []
   epoch_counter = []
   train_loss_history = []
-
+  
   best_test_loss = np.inf
+  best_train_loss = np.inf
 
   for epoch in range(num_epochs):                           
     avg_loss = train(network, training_generator, loss_function, optimizer, epoch)
+    if avg_loss < best_train_loss:
+        torch.save(network, overfit_output_path)
+        best_train_loss = avg_loss
     test_loss = test(network, testing_generator, loss_function, epoch)
     if test_loss < best_test_loss:
         torch.save(network, output_path)
@@ -907,7 +911,7 @@ trainAndGraphDerivative2 = lambda net, train_gen, test_gen, loss_fn, opt, n_epoc
 
 
 
-trainAndGraphDerivative = lambda net, train_gen, test_gen, loss_fn, opt, n_epochs, lr, outputPath, log_rate = 1, verbose = False : trainAndGraph(net, train_gen, test_gen, loss_fn, opt, n_epochs, lr, outputPath, log_rate, train, test_with_grad, graph = verbose)
+trainAndGraphDerivative = lambda net, train_gen, test_gen, loss_fn, opt, n_epochs, lr, outputPath, overfit_outputPath, log_rate = 1, verbose = False : trainAndGraph(net, train_gen, test_gen, loss_fn, opt, n_epochs, lr, outputPath, overfit_outputPath, log_rate, train, test_with_grad, graph = verbose)
 
 
 
@@ -1012,7 +1016,10 @@ def value_mse(model_outputs, coords, gt_value, epoch):
     #model_outputs = torch.squeeze(model_outputs,-1)
     #multiplier = torch.zeros(coords.shape)
     multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
-    value_loss = torch.nn.L1Loss()(model_outputs * multiplier, gt_value * multiplier)
+    regularizer_batch = torch.mean(multiplier,dim=[1,2])
+    regularizer = torch.mean(multiplier)/10
+    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+    value_loss = torch.nn.L1Loss()(model_outputs * multiplier, gt_value * multiplier) + regularizer
     return value_loss
 
 #laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds[0],preds[1], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
