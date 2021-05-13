@@ -814,7 +814,7 @@ if __name__ == "__main__":
 
 
         #Training parameters
-        num_epochs = 20 #15000 #1000
+        num_epochs = 300 #15000 #1000
         print_interval = 1
         learning_rate = 5e-5#1e-5
         #loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()

@@ -682,7 +682,15 @@ class ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(nn.Module):
         intensity = torch.flatten(intensity,start_dim=2)
         intensity = torch.transpose(intensity,1,2)
 
-        model_output = siren_output['model_out'] * intensity
+        intensity =  intensity*.9 + .1 # clamping
+        
+
+        siren = -nn.Sigmoid()(-siren_output['model_out'])*.9+.1 # clamping
+
+
+
+
+        model_output = siren * intensity
 
 
 
@@ -1010,22 +1018,67 @@ laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds['model_ou
 
 
 
-def value_mse(model_outputs, coords, gt_value, epoch):
 
 
+
+def value_mse(model_outputs_dict, coords, gt_value, epoch):
     #model_outputs = torch.squeeze(model_outputs,-1)
     #multiplier = torch.zeros(coords.shape)
+
+    mask = model_outputs_dict['intensity']
+   
+    regularizer_batch = torch.mean(mask,dim=[1,2])
+    regularizer = torch.mean(regularizer_batch)/20.0
+
+
     multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
-    regularizer_batch = torch.mean(multiplier,dim=[1,2])
-    regularizer = torch.mean(multiplier)/10
     #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
-    value_loss = torch.nn.L1Loss()(model_outputs * multiplier, gt_value * multiplier) + regularizer
+    value_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'] * multiplier, gt_value * multiplier) + regularizer
+    print("intensity loss:", regularizer)
     return value_loss
 
+#def value_mse(model_outputs_dict, coords, gt_value, epoch):
+#    #model_outputs = torch.squeeze(model_outputs,-1)
+#    #multiplier = torch.zeros(coords.shape)
+
+#    raw_mask = model_outputs_dict['intensity']
+#    mask =  raw_mask*.9 + .1
+#    regularizer_batch = torch.mean(raw_mask,dim=[1,2])
+#    regularizer = torch.mean(regularizer_batch)/20.0
+
+#    raw_siren = model_outputs_dict['siren_out']
+#    siren = torch.relu(-raw_siren)+.1
+#    #model_outputs = torch.relu(-model_outputs_dict['model_out']) + .1 # SIREN values should be between -inf and 0, although initially there could be positive values. This is essentially a ReLU
+#    multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+#    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+#    value_loss = torch.nn.L1Loss()(-1 * mask * siren * multiplier, gt_value * multiplier) + regularizer
+#    print("intensity loss:", regularizer)
+#    return value_loss
+
 #laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds[0],preds[1], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
-value_mse_with_coords = lambda preds,gt,epoch: value_mse(preds['model_out'],preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+value_mse_with_coords = lambda preds,gt,epoch: value_mse(preds,preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
 
 
 
 
 
+#laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds['model_out'],preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+
+
+
+#def value_mse(model_outputs_dict, coords, gt_value, epoch):
+#    #model_outputs = torch.squeeze(model_outputs,-1)
+#    #multiplier = torch.zeros(coords.shape)
+
+    
+#    intensity =  model_outputs_dict['intensity']*.9 + .1
+#    regularizer_batch = torch.mean(intensity,dim=[1,2])
+#    regularizer = torch.mean(regularizer_batch)/20.0
+
+
+#    model_outputs = torch.relu(-model_outputs_dict['model_out']) + .1 # SIREN values should be between -inf and 0, although initially there could be positive values. This is essentially a ReLU
+#    multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+#    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+#    value_loss = torch.nn.L1Loss()(model_outputs * multiplier, gt_value * multiplier) + regularizer
+#    print("intensity loss:", regularizer)
+#    return value_loss

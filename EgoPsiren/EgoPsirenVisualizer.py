@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
     LOAD_NETWORK_FROM_DISK = True    
 
-    network = torch.load('overfit_ego_with_intensity.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
+    network = torch.load('overfit_test_network_exp_newnewloss.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
         network = network.module
@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     partial_folder_path = 'S:\\fut_loc\\test\\' #20150401_walk_00\\'
     
-    folder_name =  '20150402_grocery' #'20150418_mall_00' # '20150401_walk_00' #
+    folder_name =   '20150402_grocery' #'20150418_mall_00' #'20150401_walk_00' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -779,7 +779,8 @@ if __name__ == "__main__":
                 axes[1].set_xlim(*boundsX)
                 axes[1].set_ylim(*boundsY)
                 axes[1].set_aspect(1)
-                axes[1].imshow(intensity_map, cmap='plasma')
+                axes[1].imshow(intensity_map*.9 + .1, cmap='plasma')
+                print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
                 #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
         
             axes[0+load_offset].set_title('Input Image (Unnormalized)')
@@ -799,6 +800,8 @@ if __name__ == "__main__":
             axes[1+load_offset].set_xlim(*boundsX)
             axes[1+load_offset].set_ylim(*boundsY)
             axes[1+load_offset].set_aspect(1)
+            #combined = - (intensity_map*.9 + .1) * np.maximum(-outImagea,0)
+            #print("comb max:", np.max(combined),"comb min:",np.min(combined))
             axes[1+load_offset].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
             axes[1+load_offset].plot(trajnp[:,0], trajnp[:,1], 'r')
     
@@ -807,6 +810,7 @@ if __name__ == "__main__":
             axes[2+load_offset].set_ylim(*boundsY)
             axes[2+load_offset].set_aspect(1)
             axes[2+load_offset].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
+            print('avg gt:',np.mean(np.reshape(test_coord_value,(ego_pixel_shape))))
             axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'r')
 
             #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
