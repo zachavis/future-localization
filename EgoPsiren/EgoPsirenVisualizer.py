@@ -26,32 +26,45 @@ from Common.DataReader import Coord2Polar
 
 from scipy import interpolate
 from scipy import stats
+from sklearn.neighbors import NearestNeighbors
+from scipy.interpolate import interp1d
+
+import pickle
 
 
 PRINT_DEBUG_IMAGES = False
 LOAD_NETWORK_FROM_DISK = True
 USE_INTENSITY = True
+USE_EGO = True
 SHOW_INTENSITY = True
 if __name__ == "__main__":
     #DNN.current_epoch = 0
 
 
     LOAD_NETWORK_FROM_DISK = True    
-
-    network = torch.load('overfit_test_network_exp_newnewloss.pt') #torch.load('hypernet_1200imgs_300epochs.pt')
+    #overfit_ego_map_with_mask_newnewloss
+    #overfit_skinny_exp_all_imgs
+    #overfit_ego_map_all_imgs
+    network = torch.load('overfit_ego_map_with_mask_newnewloss.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
+    vae_network = torch.load('autoencoder.pt')
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
         network = network.module
+    if type(vae_network) == torch.nn.DataParallel:
+        vae_network = vae_network.module
     network.cuda()
     network.eval()
+    vae_network.cuda()
+    vae_network.eval()
     print("Parameter count:", DNN.CountParameters(network))
+    print("VAE parameter count:", DNN.CountParameters(vae_network))
 
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path = 'S:\\fut_loc\\test\\' #20150401_walk_00\\'
+    partial_folder_path = 'S:\\fut_loc\\train\\' #20150401_walk_00\\'
     
-    folder_name =   '20150402_grocery' #'20150418_mall_00' #'20150401_walk_00' #
+    folder_name =  '20150401_walk_00' #'20150419_ikea' # '20150402_grocery' #'20150418_mall_00' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -139,6 +152,40 @@ if __name__ == "__main__":
         vFilename = data;
         #fid.close();
 
+                 
+        # KNN DATA LOADING
+        knnPickle = open('knn_alexfeats.knn','rb')
+        KNN = pickle.load(knnPickle)
+        knnPickle.close()
+
+        dictPickle = open('knn_traintraj.dict','rb')
+        LOG_POLAR_TRAJECTORY_DICTIONARY_TR = pickle.load(dictPickle)
+        LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS = list(LOG_POLAR_TRAJECTORY_DICTIONARY_TR.keys())
+        dictPickle.close()
+
+        AlexNet = torch.hub.load('pytorch/vision:v0.9.0', 'alexnet', pretrained=True)
+        mods = list(AlexNet.named_modules())
+        AlexNet.named_modules()
+        children = AlexNet.children()
+        childrenchildren = list( list(children)[-1].children())
+        penultimate_layer = childrenchildren[4]
+        #print(listchildren)
+        #print(type(listchildren[-1]))
+        #print(listchildren[-1])
+
+        activation = {}
+        def get_activation(name):
+            def hook(model, input, output):
+                activation[name] = output.detach()
+            return hook
+
+
+        penultimate_layer.register_forward_hook(get_activation('classifier.4'))
+
+        #returns = model(img)
+        #feature = activation['classifier.4']
+
+
 
 
 
@@ -150,7 +197,7 @@ if __name__ == "__main__":
 
         
 
-        frameOffset = 0
+        frameOffset = 6
         frameEnd = len(os.listdir(folder_path + 'im\\')) #55
         imageScale = .1
 
@@ -226,6 +273,8 @@ if __name__ == "__main__":
             R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
 
 
+
+            #tr_ground_ALIGNED = R_rect_ego @ tr['XYZ'].T - np.linalg.norm(tr['up'])
             
             tr_ground_ALIGNED = R_rect_ego @ tr_ground_OG # ALIGN CAMERA SPACE GROUND PLANE TO "WORLD SPACE"
             t, r = Coord2Polar(tr_ground_ALIGNED[2],tr_ground_ALIGNED[0])#Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
@@ -239,15 +288,7 @@ if __name__ == "__main__":
                 #print('')
             logr = np.log(r)
 
-            # TODO: R_rect makes sense right?
-            #homography = K_data @ R_rect @ R_rect_ego @ R_rect.T @ np.linalg.inv(K_data)
-
-            #img_rectified = cv2.warpPerspective(img*2.0-1.0, homography, (img.shape[1], img.shape[0])) # want to shift the values here so that the normalized version has black in the rectified location
-
-       
-
-            #img_resized = cv2.resize(img_rectified, (int(img_rectified.shape[1]*imageScale), int(img_rectified.shape[0]*imageScale)))
-            #img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
+            
 
 
 
@@ -309,6 +350,7 @@ if __name__ == "__main__":
 
             aspect_ratio = 3/4#(maxT-minT)/(maxR-minR)
             ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
+            ego_pixel_shape_AlexNet = (256,256)
 
             ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
             ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[1]  )
@@ -317,12 +359,18 @@ if __name__ == "__main__":
             ego_pix2r = lambda x : RemapRange(x, 0, ego_pixel_shape[0], minR,maxR   )
             ego_pix2t = lambda x : RemapRange(x,0,ego_pixel_shape[1], minT,maxT  )
 
+            
+            ego_pix2r_AlexNet = lambda x : RemapRange(x, 0, ego_pixel_shape_AlexNet[0], minR,maxR   )
+            ego_pix2t_AlexNet = lambda x : RemapRange(x,0,ego_pixel_shape_AlexNet[1], minT,maxT  )
+
             RecenterDataForwardWithShape = lambda x, shape : RemapRange(x,0,max(shape[0],shape[1]),-1,1)
             RecenterDataForwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,0,max(shape[0],shape[1]),-scale,scale)
             RecenterDataBackwardWithShape = lambda x, shape : RemapRange(x,-1,1,0,max(shape[0],shape[1]))
             RecenterTrajDataForward = lambda x : RecenterDataForwardWithShape(x,ego_pixel_shape)
             RecenterTrajDataForward2 = lambda x : RecenterDataForwardWithShapeAndScale(x,ego_pixel_shape,1)
 
+            RecenterTrajDataBackward = lambda x : RecenterDataBackwardWithShape(x,ego_pixel_shape)
+            RecenterTrajDataBackward_AlexNet =  lambda x : RecenterDataBackwardWithShape(x,ego_pixel_shape_AlexNet)
         
             RecenterDataBackwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,-scale,scale,0,max(shape[0],shape[1]))
             RecenterFieldDataBackward = lambda x : RecenterDataBackwardWithShapeAndScale(x,ego_pixel_shape,1)
@@ -337,34 +385,87 @@ if __name__ == "__main__":
 
             # Generating EgoRetinalMap
 
-            all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ], dtype=np.float32)
-            all_pixel_coords[:,0] = ego_pix2t(all_pixel_coords[:,0])
-            all_pixel_coords[:,1] = ego_pix2r(all_pixel_coords[:,1])
-            all_pixel_coords[:,1] = np.exp(all_pixel_coords[:,1])
-            z, x = DataReader.Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
+            if USE_EGO:
+                all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(ego_pixel_shape_AlexNet[0]) for j in range(ego_pixel_shape_AlexNet[1]) ], dtype=np.float32)
+                all_pixel_coords[:,0] = ego_pix2t_AlexNet(all_pixel_coords[:,0])
+                all_pixel_coords[:,1] = ego_pix2r_AlexNet(all_pixel_coords[:,1])
+                all_pixel_coords[:,1] = np.exp(all_pixel_coords[:,1])
+                z, x = DataReader.Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
 
-            coords_3D = np.zeros((len(z),3))
-            coords_3D[:,0] = x
-            coords_3D[:,2] = z
+                coords_3D = np.zeros((len(z),3))
+                coords_3D[:,0] = x
+                coords_3D[:,2] = z
         
-            coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
-            coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+                coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+                coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
 
 
-            #coords_3D[:,1] *= -1
+                #coords_3D[:,1] *= -1
 
-            pixels = K_data @ R_rect @ coords_3D.T
-            pixels /= pixels[2]
-            #pixels[:,:] /= pixels[2,:]
+                pixels = K_data @ R_rect @ coords_3D.T
+                pixels /= pixels[2]
+                #pixels[:,:] /= pixels[2,:]
 
-            rowmaj_pixels = np.zeros(pixels.shape)
-            rowmaj_pixels[0] = pixels[1]
-            rowmaj_pixels[1] = pixels[0]
+                rowmaj_pixels = np.zeros(pixels.shape)
+                rowmaj_pixels[0] = pixels[1]
+                rowmaj_pixels[1] = pixels[0]
 
 
-            img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1],3)
-            img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
+                img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape_AlexNet[0], ego_pixel_shape_AlexNet[1],3)
+                img_channel_swap_AlexNet = np.moveaxis(img_resized,-1,0).astype(np.float32)
 
+
+
+
+
+                all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ], dtype=np.float32)
+                all_pixel_coords[:,0] = ego_pix2t(all_pixel_coords[:,0])
+                all_pixel_coords[:,1] = ego_pix2r(all_pixel_coords[:,1])
+                all_pixel_coords[:,1] = np.exp(all_pixel_coords[:,1])
+                z, x = DataReader.Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
+
+                coords_3D = np.zeros((len(z),3))
+                coords_3D[:,0] = x
+                coords_3D[:,2] = z
+        
+                coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+                coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+
+
+                #coords_3D[:,1] *= -1
+
+                pixels = K_data @ R_rect @ coords_3D.T
+                pixels /= pixels[2]
+                #pixels[:,:] /= pixels[2,:]
+
+                rowmaj_pixels = np.zeros(pixels.shape)
+                rowmaj_pixels[0] = pixels[1]
+                rowmaj_pixels[1] = pixels[0]
+
+
+                img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1],3)
+                img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
+
+
+
+
+
+
+
+
+
+
+
+            else:
+                # TODO: R_rect makes sense right?
+                homography = K_data @ R_rect @ R_rect_ego @ R_rect.T @ np.linalg.inv(K_data)
+
+                img_rectified = cv2.warpPerspective(img*2.0-1.0, homography, (img.shape[1], img.shape[0])) # want to shift the values here so that the normalized version has black in the rectified location
+
+       
+
+                img_resized = cv2.resize(img_rectified, (int(img_rectified.shape[1]*imageScale), int(img_rectified.shape[0]*imageScale)))
+                img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
 
 
 
@@ -374,12 +475,13 @@ if __name__ == "__main__":
                 axes[0].imshow(img)
                 #axes[1].imshow(img_rectified)
                 #axes[1].imshow(img_resized)
-                boundsX = (0,ego_pixel_shape[1])
-                boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+                if USE_EGO:
+                    boundsX = (0,ego_pixel_shape[1])
+                    boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
             
-                axes[1].set_xlim(*boundsX)
-                axes[1].set_ylim(*boundsY)
-                axes[1].set_aspect(1)
+                    axes[1].set_xlim(*boundsX)
+                    axes[1].set_ylim(*boundsY)
+                    axes[1].set_aspect(1)
                 axes[1].imshow(img_resized)
                 plt.show()
 
@@ -439,7 +541,7 @@ if __name__ == "__main__":
                 plane_offset = p0-l0
                 denoms = n @ L
                 t = np.zeros(len(denoms))
-                intersecting = np.where(denoms > 1e-6)
+                intersecting = np.where(denoms < -1e-6)
                 d = plane_offset @ n
                 result = np.divide( d[None], denoms[intersecting])
                 t[intersecting] = result
@@ -451,15 +553,18 @@ if __name__ == "__main__":
         
             depth_pixel_coords = np.array( [ [j+.5,i+.5,1.0] for i in range(img.shape[0]) for j in range(img.shape[1]) ], dtype=np.float32)
 
+            result = R_rect[1] @ tr['up']
+
             #pixel = np.array([j,i,1])
-            p_normal = -tr['up']/np.linalg.norm(tr['up'])
-            p_origin = -tr['up'] #camera assumed to be at 0,0,0
+            rect_up = tr['up']
+            p_normal = rect_up/np.linalg.norm(rect_up)
+            p_origin = -rect_up #camera assumed to be at 0,0,0
             e_origin = np.zeros(3) #zero vector
             e_rays = R_rect.T @ np.linalg.inv(K_data) @ depth_pixel_coords.T #+0
             e_rays /= np.linalg.norm(e_rays,axis=0)
             print('norm:', np.linalg.norm(e_rays[:,100]))
 
-            intplane = lambda l : intersectPlane(p_normal,p_origin,e_origin,l)
+            #intplane = lambda l : intersectPlane(p_normal,p_origin,e_origin,l)
             #vfunc = np.vectorize(intplane)
             #depths = np.apply_along_axis(intplane, 0, e_rays)
             image_siren_depths = intersectPlaneV(p_normal,p_origin,e_origin,e_rays)
@@ -486,7 +591,6 @@ if __name__ == "__main__":
 
 
             #rad_img = np.reshape(tnorm, depth_img.shape)
-
 
 
 
@@ -530,6 +634,18 @@ if __name__ == "__main__":
             
             #RESIZED_IMAGE_DICTIONARY[dictionary_index] = img_channel_swap
             test_image = img_channel_swap
+            test_image_AlexNet = img_channel_swap_AlexNet
+
+            outputs_AlexNet = AlexNet(torch.unsqueeze(torch.from_numpy(test_image_AlexNet),0))
+            feature_AlexNet = activation['classifier.4']
+            dist, idx = KNN.kneighbors(feature_AlexNet)
+
+            traj_AlexNet = LOG_POLAR_TRAJECTORY_DICTIONARY_TR[LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS[idx[0,0]]] # get best traj
+            traj_AlexNet = np.array(traj_AlexNet)
+
+
+
+
             #PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
             test_pix_trajectory = []
             
@@ -609,6 +725,13 @@ if __name__ == "__main__":
             print(test_image_prediction.device)
 
             network.cpu()
+            vae_network.cpu()
+            
+            
+            predictions_vae = vae_network({'img_sparse':torch.unsqueeze(torch.from_numpy(test_image_AlexNet),0)})
+            traj_vae = RecenterTrajDataBackward_AlexNet(np.squeeze(predictions_vae['model_out'].detach().numpy()))
+            traj_vae_t = ego_pix2t_AlexNet(traj_vae[0])
+            traj_vae_logr = ego_pix2r_AlexNet(traj_vae[1])
 
             if not USE_INTENSITY:
                 image_siren_coords_tensor = torch.unsqueeze( torch.from_numpy(image_siren_coords), 0)
@@ -672,6 +795,7 @@ if __name__ == "__main__":
             
             if USE_INTENSITY:
                 image_siren_image = interpolate.interpn((range(outImagea.shape[0]),range(outImagea.shape[1])), outImagea, image_siren_pix_coords[[1,0]].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(img.shape[0], img.shape[1])
+                #image_siren_image = interpolate.interpn((np.array(list(range(outImagea.shape[0])))+.5,np.array(list(range(outImagea.shape[1])))+.5), outImagea, image_siren_pix_coords[[1,0]].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(img.shape[0], img.shape[1])
                 image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
                 image_siren_alpha[image_siren_alpha > 0.001] = .7
 
@@ -753,6 +877,122 @@ if __name__ == "__main__":
                 #fig.colorbar(outImagea, axes[0], orientation='vertical')
 
 
+
+
+
+
+            # Let's plan a path through the image via gradient descent
+            hypo_params = network.get_hypo_net_weights({'img_sparse':test_image_prediction})
+            start = RecenterTrajDataForward(np.array([[[90,40]]]))
+            position = torch.from_numpy(start.astype(np.float32))
+            n_steps = 500
+            grad_desc_positions = np.zeros((n_steps,2))
+            grad_desc_positions[0] = position[0,0]
+            for i in range(n_steps-1):
+                siren_output = network.hypo_net({'coords':position}, params=hypo_params[0])
+                siren_grad = -DNN.gradient(siren_output['model_out'],siren_output['model_in'])
+                position +=  .0005 * siren_grad #
+                grad_desc_positions[i+1] = position[0,0].detach().numpy()
+
+            grad_desc_positions = RecenterTrajDataBackward(grad_desc_positions)
+
+
+            val = ego_pix2r(start)
+
+
+
+            min_along_y = np.argmin(outImagea,axis=1)
+            y_coords = np.arange(0,ego_pixel_shape[0])
+            below_thresh = np.zeros(ego_pixel_shape[0]).astype(np.bool)
+            threshold = .2
+            thresh_decay = (.4 +.4)/ego_pixel_shape[0] # want to be -.2 by half of ego map
+            last_n_vals = np.array([0,0,0])
+            have_prev_point = False
+            prev_x = -1
+            smoothed_min_along_y = min_along_y
+            lowest_val = 100
+            tuning_parameter = .7
+            for i in range(ego_pixel_shape[0]):
+
+                
+
+                #if i > ego_pixel_shape[0]/2:
+                #    threshold = -1
+                x = min_along_y[i]
+                y = y_coords[i]
+                distance = ego_pix2r(y)
+
+                if (distance < 0):
+                    below_thresh[i] = False
+                    continue
+
+                val_at_point = outImagea[y,x]
+
+                if have_prev_point == False:
+                    #below_thresh[i] = val_at_point > lowest_val - tuning_parameter * lowest_val#< threshold
+                    if True: #below_thresh[i]:
+                        have_prev_point = True
+                        prev_x = x
+                        if val_at_point < lowest_val:
+                            lowest_val = val_at_point
+                        smoothed_min_along_y[i] = prev_x
+                    continue
+
+                left_val = outImagea[y,prev_x-1]
+                center_val = outImagea[y,prev_x]
+                right_val = outImagea[y,prev_x+1]
+
+                vals = np.array([left_val, center_val, right_val])
+
+                lowest_val_pos = np.argmin(vals) #-1 to center
+
+                threshold =  lowest_val - tuning_parameter * lowest_val
+                val = vals[lowest_val_pos]
+                isgood = vals[lowest_val_pos] < threshold
+                if not isgood:
+                    print('not good')
+
+                below_thresh[i] = val < threshold #vals[lowest_val_pos] < threshold
+
+
+                prev_x += lowest_val_pos-1
+                smoothed_min_along_y[i] = prev_x
+                if val < lowest_val:
+                    lowest_val = val
+                
+                if below_thresh[i] == False:
+                    break
+                #if 
+                
+
+                #j = i
+                #while j < ego_pixel_shape[0]:
+                #    x = min_along_y[i]
+                #    y = y_coords[i]
+                #    distance = ego_pix2r(y)
+
+                
+                    
+                #threshold -= thresh_decay
+
+
+
+
+
+            #axes[1].plot(,,'r',linewidth=2)
+            traj_t_pix = min_along_y[below_thresh==True]
+            traj_r_pix = y_coords[below_thresh==True]
+            
+            traj_t = ego_pix2t(traj_t_pix)
+            traj_logr = ego_pix2r(traj_r_pix)
+
+            traj_r = np.exp(traj_logr)
+
+
+
+
+
+
             load_offset = 1 if LOAD_NETWORK_FROM_DISK else 0
             load_offset += 1 if USE_INTENSITY else 0
             fig, axes = plt.subplots(1,3 + load_offset)
@@ -771,8 +1011,77 @@ if __name__ == "__main__":
 
                 #axes[1].set_title('Siren Overlay (Original)')
                 #axes[1].set_aspect(1)
-                axes[0].imshow(image_siren_image, alpha=image_siren_alpha)
-                axes[0].plot(raw_trajectory[0], raw_trajectory[1], 'r')
+
+                axes[0].set_xlim(0,img.shape[1])
+                axes[0].set_ylim(img.shape[0],0)
+                axes[0].set_aspect(1)
+
+                #axes[0].imshow(image_siren_image, alpha=image_siren_alpha)
+                axes[0].plot(raw_trajectory[0], raw_trajectory[1], 'm--')
+                
+                z, x = DataReader.Polar2Coord(traj_t,traj_r)
+            
+                coords_3D = np.zeros((len(z),3))
+                coords_3D[:,1] = 0
+                coords_3D[:,0] = x
+                coords_3D[:,2] = z
+                coords_3D = (R_rect_ego.T @ coords_3D.T).T
+                coords_3D -= tr['up'].T
+
+                pixels = K_data @ R_rect @ coords_3D.T
+                pixels /= pixels[2]
+                axes[0].plot(pixels[0], pixels[1], 'r')
+
+
+                z, x = DataReader.Polar2Coord(traj_AlexNet[:,0], np.exp(traj_AlexNet[:,1]))
+                
+                coords_3D = np.zeros((len(z),3))
+                coords_3D[:,1] = 0
+                coords_3D[:,0] = x
+                coords_3D[:,2] = z
+                coords_3D = (R_rect_ego.T @ coords_3D.T).T
+                coords_3D -= tr['up'].T
+
+                pixels = K_data @ R_rect @ coords_3D.T
+                pixels /= pixels[2]
+                axes[0].plot(pixels[0], pixels[1], 'c--')
+
+
+                
+                z, x = DataReader.Polar2Coord(traj_vae_t, np.exp(traj_vae_logr))
+                
+                coords_3D = np.zeros((len(z),3))
+                coords_3D[:,1] = 0
+                coords_3D[:,0] = x
+                coords_3D[:,2] = z
+                coords_3D = (R_rect_ego.T @ coords_3D.T).T
+                coords_3D -= tr['up'].T
+
+                pixels = K_data @ R_rect @ coords_3D.T
+                pixels /= pixels[2]
+                axes[0].plot(pixels[0], pixels[1], 'w--')
+                
+                #fx = interp1d(pixels[0], np.arange(len(pixels[0])))
+                #fy = interp1d(pixels[1], np.arange(len(pixels[1])))
+                #ix = np.linspace(0,len(pixels[0]-1),num=25,endpoint=True)
+                #iy = np.linspace(0,len(pixels[1]-1),num=25,endpoint=True)
+                #new_xs = fx(ix)
+                #new_ys = fy(iy)
+                #axes[0].plot(new_xs,new_ys, 'wx')
+
+                #xn,yn = DataGens.InterpAlongLine(pixels[0],pixels[1],10)
+                #axes[0].plot(xn,yn,'wo')
+
+
+                
+            t_AlexNet = traj_AlexNet[:,0]
+            logr_AlexNet = traj_AlexNet[:,1]
+            tpix_AlexNet = ego_t2pix(t_AlexNet)
+            rpix_AlexNet = ego_r2pix(logr_AlexNet)
+            
+            traj_vae_tpix = ego_t2pix(traj_vae_t)
+            traj_vae_logrpix = ego_t2pix(traj_vae_logr)
+
                 
             if USE_INTENSITY:
                 axes[1].set_title('Intensity Mask')
@@ -780,10 +1089,16 @@ if __name__ == "__main__":
                 axes[1].set_ylim(*boundsY)
                 axes[1].set_aspect(1)
                 axes[1].imshow(intensity_map*.9 + .1, cmap='plasma')
+                axes[1].plot(min_along_y[below_thresh==True],y_coords[below_thresh==True],'r',linewidth=2)
+                axes[1].plot(trajnp[:,0], trajnp[:,1], 'm--')
+                axes[1].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
+                axes[1].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
                 print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
                 #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
         
-            axes[0+load_offset].set_title('Input Image (Unnormalized)')
+            
+
+            axes[0+load_offset].set_title('Input Image with Mask')#(Unnormalized)')
             boundsX = (0,ego_pixel_shape[1])
             boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
             
@@ -791,19 +1106,44 @@ if __name__ == "__main__":
             axes[0+load_offset].set_ylim(*boundsY)
             axes[0+load_offset].set_aspect(1)
             axes[0+load_offset].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
-            if USE_INTENSITY:
-                axes[0+load_offset].imshow(intensity_map, alpha=.30, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
+            axes[0+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
+            axes[0+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
+            axes[0+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            axes[0+load_offset].plot(traj_t_pix,traj_r_pix,'r',linewidth=2)
+            #axes[0+load_offset].imshow(outImagea,alpha=.5)
+
+
+            #if USE_INTENSITY:
+            #    axes[0+load_offset].imshow(intensity_map, alpha=.30, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
+
+
+
 
 
         
-            axes[1+load_offset].set_title('Network with GT Traj')
+            axes[1+load_offset].set_title('Network Prediction and Traj')
             axes[1+load_offset].set_xlim(*boundsX)
             axes[1+load_offset].set_ylim(*boundsY)
             axes[1+load_offset].set_aspect(1)
             #combined = - (intensity_map*.9 + .1) * np.maximum(-outImagea,0)
             #print("comb max:", np.max(combined),"comb min:",np.min(combined))
-            axes[1+load_offset].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
-            axes[1+load_offset].plot(trajnp[:,0], trajnp[:,1], 'r')
+            #(outImagea*10).astype(int).astype(float)/10
+            tempval = axes[1+load_offset].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
+            axes[1+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
+            axes[1+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
+            axes[1+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            siren_min = np.unravel_index(np.argmin(outImagea),outImagea.shape)
+            #axes[1+load_offset].plot(grad_desc_positions[:,0],grad_desc_positions[:,1],'r')
+            #axes[1+load_offset].plot(siren_min[1],siren_min[0],'cx',markersize=4)
+            #axes[1+load_offset].plot(grad_desc_positions[-1,0],grad_desc_positions[-1,1],'rx',markersize=4)
+            axes[1+load_offset].plot(min_along_y[below_thresh==True],y_coords[below_thresh==True],'r',linewidth=2)
+            #axes[1+load_offset].plot(min_along_y[below_thresh==True][-1],y_coords[below_thresh==True][-1],'cx',markersize=4)
+            #axes[1+load_offset].plot(min_along_y[below_thresh==False],y_coords[below_thresh==False],'bx',markersize=4)
+
+            
+            cax = fig.add_axes([.3, .95, .4, .05])
+            fig.colorbar(tempval, cax, orientation='horizontal')
+
     
             axes[2+load_offset].set_title('GT Value with GT Traj')
             axes[2+load_offset].set_xlim(*boundsX)
@@ -811,7 +1151,9 @@ if __name__ == "__main__":
             axes[2+load_offset].set_aspect(1)
             axes[2+load_offset].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
             print('avg gt:',np.mean(np.reshape(test_coord_value,(ego_pixel_shape))))
-            axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'r')
+            axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
+            axes[2+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
+            axes[2+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
 
             #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
 

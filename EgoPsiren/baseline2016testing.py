@@ -1,8 +1,9 @@
-
 import sys
 from sys import platform
 import os
 import random
+
+import pickle
 
 USING_LINUX = platform == "linux" or platform == "linux2"
 
@@ -25,6 +26,7 @@ from Common import DataGens
 
 from scipy import interpolate
 from scipy import stats
+from sklearn.neighbors import NearestNeighbors
 
 
 def FileAsLines(fid):
@@ -162,7 +164,7 @@ if __name__ == "__main__":
     N_WORKERS = 0
     
     # TODO put these values in a settings file on disk to force uniformity across programs
-    img_height = 196#128#64
+    img_height = 256 #196#128#64
 
     minR = -.5
     maxR = 4#5 #4.5
@@ -172,7 +174,7 @@ if __name__ == "__main__":
     ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
     
     FILE_UPPER_LIMIT = 1000 # a number larger than the number of images in a single directory, used for dictionary indexing
-    n_folders = 1
+    n_folders = 100
 
 
     # FORNOW: Just going to assume it's only in train mode
@@ -253,6 +255,7 @@ if __name__ == "__main__":
     # LOADING VARIABLES
     RESIZED_IMAGE_DICTIONARY = {} # could probably pre-allocate this into a big numpy array...
     LOG_POLAR_TRAJECTORY_DICTIONARY = {}
+    COORD_TRAJECTORY_DICTIONARY = {}
     PIXEL_TRAJECTORY_DICTIONARY = {}
 
     RAW_IMAGE_DICTIONARY = {}
@@ -261,6 +264,7 @@ if __name__ == "__main__":
     # Testing VARIABLES
     RESIZED_IMAGE_DICTIONARY_TE = {} # could probably pre-allocate this into a big numpy array...
     LOG_POLAR_TRAJECTORY_DICTIONARY_TE = {}
+    COORD_TRAJECTORY_DICTIONARY_TE = {}
     PIXEL_TRAJECTORY_DICTIONARY_TE = {}
 
     RAW_IMAGE_DICTIONARY_TE = {}
@@ -269,6 +273,7 @@ if __name__ == "__main__":
     # Training VARIABLES
     RESIZED_IMAGE_DICTIONARY_TR = {} # could probably pre-allocate this into a big numpy array...
     LOG_POLAR_TRAJECTORY_DICTIONARY_TR = {}
+    COORD_TRAJECTORY_DICTIONARY_TR = {}
     PIXEL_TRAJECTORY_DICTIONARY_TR = {}
 
     RAW_IMAGE_DICTIONARY_TR = {}
@@ -283,6 +288,7 @@ if __name__ == "__main__":
         if data_subset == 'train':
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TR
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TR
+            COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TR
             PIXEL_TRAJECTORY_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TR
 
             RAW_IMAGE_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TR
@@ -290,8 +296,10 @@ if __name__ == "__main__":
             
         
         if data_subset == 'test':
+            break # ONLY to skip testing data entirely
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TE
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TE
+            COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TE
             PIXEL_TRAJECTORY_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TE
 
             RAW_IMAGE_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TE
@@ -705,10 +713,13 @@ if __name__ == "__main__":
                 RESIZED_IMAGE_DICTIONARY[dictionary_index] = img_channel_swap
                 PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []
+                COORD_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 for pix in future_trajectory:
                     PIXEL_TRAJECTORY_DICTIONARY[dictionary_index].append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
-                    newpoint = ( Polar2Coord( ego_pix2t(pix[0]),np.exp(ego_pix2r(pix[1])) ) )
-                    LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index].append( newpoint )
+                    logpolar_coord = (ego_pix2t(pix[0]),ego_pix2r(pix[1]))
+                    newpoint = ( Polar2Coord( logpolar_coord[0],np.exp(logpolar_coord[1]) ) )
+                    LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index].append( logpolar_coord )
+                    COORD_TRAJECTORY_DICTIONARY[dictionary_index].append( newpoint )
         
                 #for i in range(len(logrpix)):
                 #    LOG_POLAR_TRAJECTORY_DICTIONARY[iFrame].append( (tpix[i], logrpix[i]) ) # t is horizontal axis, logr is vertical
@@ -751,395 +762,66 @@ if __name__ == "__main__":
 
 
 
-    if (not LOAD_NETWORK_FROM_DISK):
-        # Now, Let's train the neural network.
+    model = torch.hub.load('pytorch/vision:v0.9.0', 'alexnet', pretrained=True)
+    mods = list(model.named_modules())
+    model.named_modules()
+    children = model.children()
+    childrenchildren = list( list(children)[-1].children())
+    penultimate_layer = childrenchildren[4]
+    #print(listchildren)
+    #print(type(listchildren[-1]))
+    #print(listchildren[-1])
 
-        n_samples = 30000 # 25000
-        n_obstsamples = 1#30000
-        #n_2sample_laplacian = 5000
-        n_2sample = 10000#15000
+    activation = {}
+    def get_activation(name):
+        def hook(model, input, output):
+            activation[name] = output.detach()
+        return hook
 
 
-        if (PRINT_DEBUG_IMAGES):
-            fig, ax = plt.subplots(1,1)
+    penultimate_layer.register_forward_hook(get_activation('classifier.4'))
+    #model._modules.register_forward_hook(get_activation('classifier.4'))
 
-            boundsX = (0,ego_pixel_shape[1])
-            boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-            ax.set_xlim(*boundsX)
-            ax.set_ylim(*boundsY)
-            ax.set_aspect(1)
 
-            #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
+    descriptors = np.zeros((len(RESIZED_IMAGE_DICTIONARY_TR.keys()),4096))
 
-            ax.quiver(gradient_samples[0][:,0], gradient_samples[0][:,1], gradient_samples[1][:,0],gradient_samples[1][:,1], color='red', units='xy' ,scale=1)
+    i = 0
+    for frame in RESIZED_IMAGE_DICTIONARY_TR.keys():
 
-            #ux = vx/np.sqrt(vx**2+vy**2)
-            #uy = vy/np.sqrt(vx**2+vy**2)
+        img = torch.unsqueeze(torch.from_numpy(RESIZED_IMAGE_DICTIONARY_TR[frame]),0)
+
+        returns = model(img)
+        feature = activation['classifier.4']
+        descriptors[i] = feature
+        i += 1
+
         
-            for traj in future_trajectory.values():
-                trajnp = np.array(traj)
-                ax.plot(trajnp[:,0], trajnp[:,1], 'r')
+    knn = NearestNeighbors(n_neighbors = 5).fit(descriptors)
 
-            plt.show()
-
+    testimg = torch.unsqueeze(torch.from_numpy( RESIZED_IMAGE_DICTIONARY_TR[list(RESIZED_IMAGE_DICTIONARY_TR.keys())[3]]),0)
+    returns = model(testimg)
+    feature = activation['classifier.4']
     
-
-        #hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward,torch.zeros((1,32,32)))
-        #hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset2(future_trajectory,n_2sample_laplacian,RecenterTrajDataForward,all_pixel_coords,img_channel_swap) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        #hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset2(newtraj,n_2sample_laplacian,RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,img_channel_swap,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
-
-        #hyper_trajectory_data_set = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
-
-        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
-
-        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
+    dist, idx = knn.kneighbors(feature)
 
 
+    #check = np.array(list(RESIZED_IMAGE_DICTIONARY_TR.keys())) == np.array(list(LOG_POLAR_TRAJECTORY_DICTIONARY_TR.keys()))
 
-        #gt_field_dataset = DataGens.GTFieldDataset(future_trajectory, n_2sample_laplacian, RecenterTrajDataForward, all_pixel_coords)
-        ##gt_field_data_generator = torch.utils.data.DataLoader(gt_field_dataset, batch_size= 1, shuffle=True)
-
-
-
-
-
-
-
-
-
-
-
-        #Training parameters
-        num_epochs = 300 #15000 #1000
-        print_interval = 1
-        learning_rate = 5e-5#1e-5
-        #loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()
-        #loss_function2 = DNN.laplacian_mse_with_coords
-        loss_function3 = DNN.value_mse_with_coords
-        
-
-        #trajectory_training_dataset = trajectory_data_set
-        #trajectory_testing_dataset = trajectory_training_dataset
-        #trajectory_training_generator = torch.utils.data.DataLoader(trajectory_training_dataset, batch_size = 50, shuffle=True)
-        #trajectory_testing_generator = torch.utils.data.DataLoader(trajectory_testing_dataset, batch_size = 50)
-
-        #laplacian_training_dataset = laplacian_data_set
-        #laplacian_testing_dataset = laplacian_training_dataset
-        #laplacian_training_generator = torch.utils.data.DataLoader(laplacian_training_dataset, batch_size = 50, shuffle=True)
-        #laplacian_testing_generator = torch.utils.data.DataLoader(laplacian_testing_dataset, batch_size = 50)
-        
-        hyper_training_set = hyper_trajectory_data_set_tr
-        hyper_testing_set = hyper_trajectory_data_set_te
-        hyper_training_generator = torch.utils.data.DataLoader(hyper_training_set, num_workers = N_WORKERS, batch_size = BATCH_SIZE, shuffle=True)
-        hyper_testing_generator = torch.utils.data.DataLoader(hyper_testing_set, num_workers = N_WORKERS,  batch_size = BATCH_SIZE)
-        
-        #i, (pos, pix) = next(enumerate(hyper_training_generator))
-        
-        
-        if (False and PRINT_DEBUG_IMAGES): # The false is because the hyper generator uses random points instead of pixel centers
-            fig, ax = plt.subplots(1,1)#, figsize=(36,6))
-            axes = [ax]
-
-            boundsX = (0,ego_pixel_shape[1])
-            boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-            axes[0].set_xlim(*boundsX)
-            axes[0].set_ylim(*boundsY)
-
-            #axes[1].set_xlim(*boundsX)
-            #axes[1].set_ylim(*boundsY)
-
-            tempval = axes[0].imshow(np.reshape(pix,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
-        
-            for traj in future_trajectory.values():
-                trajnp = np.array(traj)
-                axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
-            
-            cax = fig.add_axes([.3, .95, .4, .05])
-            fig.colorbar(tempval, cax, orientation='horizontal')
-            plt.show()
-
-
-
-
-
-        #Create model
-        print("Creating Network . . .")
-        predModel = DNN.Siren(in_features = 2, hidden_features = 32, hidden_layers = 3, out_features = 1, outermost_linear=True) #PSIREN(map.shape[1], map.shape[0], 1000, 2000, 1000)  #8,5
-
-
-        network = predModel;
-        optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
-        #loss_function = nn.MSELoss()
-        #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
-        testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
-        testModel.cuda()
-        testModel.eval()
-        #testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,*img_channel_swap.shape)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
-        
-        #testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,1,32,32)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
-        #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=64,num_hidden_layers=3) #Last used
-        #network = predModel#testModel#
-
-        #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)
-        #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)#,type='relu')
-        network = testModel# predModel#
-        
-        if torch.cuda.device_count() > 1:
-            print("Utilizing {} GPUs.".format(torch.cuda.device_count()))
-            network = torch.nn.DataParallel(network)
-
-
-
-        # TODO: Allow flexibility for running code on systems without GPU 
-        # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        # x = x.to(device)
-
-        network.cuda()
-        network.eval()
-        optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
-        
-        print("Total Parameter count:", DNN.CountParameters(network))
-        print("Encoder Params:",DNN.CountParameters(network.encoder))
-        print("Hyper Params:",DNN.CountParameters(network.hyper_net))
-        print("Hypo/SIREN Params:",DNN.CountParameters(network.hypo_net))
-        print("Walkable Params:",DNN.CountParameters(network.multiplier_net))
-
-
-
-        # 0.13732084323360463 !!!!tr 
-        # 0.13776845484972 !!!!te 
-
-        #0.03715017518837645 !!!!tr
-        #0.1310737913563138 !!!!te 
-        
-        #network = torch.load('overfit_ego_map_all_imgs.pt')#('overfit_skinny_exp_all_imgs.pt')
-        
-        #if type(network) == torch.nn.DataParallel:
-        #    network = network.module
-        
-        #network.cuda()
-
-        #train_loss = DNN.test_with_grad(network, hyper_training_generator, loss_function3, 0)
-        #test_loss = DNN.test_with_grad(network, hyper_testing_generator, loss_function3, 0)
-        #print(train_loss,"!!!!tr")
-        #print(test_loss,"!!!!te")
-
-
-
-        #DNN.trainAndGraphDerivative(network, gt_field_training_generator, gt_field_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
-        
-        #DNN.trainAndGraphDerivative(network, field_training_generator, field_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
-        #DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
-        DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, outputfile, overfitoutputfile, print_interval )
-        ##DNN.trainAndGraphDerivative(network, trajectory_training_generator, trajectory_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
-        #DNN.trainAndGraphDerivative2(network, (trajectory_training_generator, laplacian_training_generator), (trajectory_testing_generator, laplacian_testing_generator), (loss_function, loss_function2), optimizer, num_epochs, learning_rate, print_interval )  # I think Last used for RSS submission, smoothing
-        ##trainAndGraphDerivative2(network3, (crowd_training_generator,crowd_training_generator3), (crowd_testing_generator, crowd_testing_generator3), (loss_function3,loss_function4), optimizer3, num_epochs, learning_rate, print_interval)
+    nearest_feature = LOG_POLAR_TRAJECTORY_DICTIONARY_TR[list(RESIZED_IMAGE_DICTIONARY_TR.keys())[idx[0,0]]]
+       
     
-        #torch.save(network, overfitoutputfile) #'hypernet_1200imgs_300epochs.pt')
+    knnPickle = open('knn_alexfeats.knn','wb')
+    pickle.dump(knn,knnPickle)
+    knnPickle.close()
 
-    else:
-        network = torch.load('hypernet_44imgs_2500epochs.pt')
-        network.cuda()
-        network.eval()
-        print("Parameter count:", DNN.CountParameters(network))
-
-
+    dictPickle = open('knn_traintraj.dict','wb')
+    pickle.dump(LOG_POLAR_TRAJECTORY_DICTIONARY_TR,dictPickle)
+    dictPickle.close()
 
 
-        
-    #network = network.hypo_net
-    #network.cpu()
-    #network = network({'img_sparse':torch.zeros((1,1,32,32))})
-    if not USING_LINUX:
-        for frame in RESIZED_IMAGE_DICTIONARY.keys():
-            testFrame = frame
-            test_image = RESIZED_IMAGE_DICTIONARY[testFrame] # img_channel_swap
-            test_pix_trajectory = PIXEL_TRAJECTORY_DICTIONARY[testFrame]
-            test_ws_trajectory = LOG_POLAR_TRAJECTORY_DICTIONARY[testFrame]
-
-            if (LOAD_NETWORK_FROM_DISK):
-                raw_image = RAW_IMAGE_DICTIONARY[testFrame]
-                raw_trajectory = TRAJ_IN_IMAGE_DICTIONARY[testFrame]
-
-
-            all_pixel_coords_xformed = np.zeros(all_pixel_coords.shape).astype(np.float32)
-            all_pixel_coords_xformed[:,0] = ego_pix2t(all_pixel_coords[:,0])
-            all_pixel_coords_xformed[:,1] = np.exp(ego_pix2r(all_pixel_coords[:,1]))
-            all_pixel_coords_xformed = np.array(Polar2Coord(all_pixel_coords_xformed[:,0],all_pixel_coords_xformed[:,1])).T
-
-            test_coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=2)
-
-            test_image_prediction = torch.from_numpy( np.expand_dims(test_image,0) )
-
-            network.cpu()
-
-            #torch.no_grad()
-            # Is y x okay or should we do x y
-            dense_scale = 1
-            dense_coords = np.array( [[ [RecenterTrajDataForward((j+.5)/dense_scale),RecenterTrajDataForward((i+.5)/dense_scale)] for i in range(ego_pixel_shape[0]*dense_scale) for j in range(ego_pixel_shape[1]*dense_scale) ]], dtype=np.float32)
-            dense_coords = torch.unsqueeze( torch.from_numpy(dense_coords), 0)
-
-            all_coords = np.array( [[ [RecenterTrajDataForward(j+.5),RecenterTrajDataForward(i+.5)] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ]], dtype=np.float32)
-            all_coords = torch.unsqueeze( torch.from_numpy(all_coords), 0)
-
-            all_coords = torch.unsqueeze( torch.from_numpy(RecenterTrajDataForward(all_pixel_coords.astype(np.float32))), 0)
-
-
-            print(all_coords.shape)
-            predictions = network({'coords':all_coords,'img_sparse':test_image_prediction})
-            if type(predictions) is dict:
-                outImage = (predictions['model_out'], predictions['model_in'])
-            else:
-                outImage = predictions
-            print('max',torch.max(outImage[0]))
-            print('min',torch.min(outImage[0]))
-            print(type(outImage))
-            print(outImage[0].shape)
-            print(outImage[1].shape)
-
-            fig, axes = plt.subplots(1,2)#, figsize=(36,6))
-            fig.suptitle('Comparison of Gradients of Network Output')
-            #axes = [ax]
-            #axes.imshow(outImage[0].cpu().view(distImage.shape).detach().numpy())
-
-            boundsX = (0,ego_pixel_shape[1])
-            boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-            axes[0].set_title('Unnormallized')
-            axes[0].set_xlim(*boundsX)
-            axes[0].set_ylim(*boundsY)
-    
-            axes[1].set_title('Normalized')
-            axes[1].set_xlim(*boundsX)
-            axes[1].set_ylim(*boundsY)
-
-            #axes[0].imshow(-outImage[0].cpu().view(ego_pixel_shape).detach().numpy(), extent=[*(minT,maxT), *(minR,maxR)], interpolation='none')#, cmap='gnuplot')
-            outImagea = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
-            tempval = axes[0].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
-            axes[1].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
-        
-            # Rerun again for gradient
-            predictions = network({'coords':all_coords,'img_sparse':test_image_prediction})
-            if type(predictions) is dict:
-                outImage = (predictions['model_out'], predictions['model_in'])
-            else:
-                outImage = predictions
-            outImageA = -DNN.gradient(*outImage)#-DNN.gradient(*predModel(outImage[1]))
-        
-            predictions = network({'coords':dense_coords,'img_sparse':test_image_prediction})
-            if type(predictions) is dict:
-                outImage = (predictions['model_out'], predictions['model_in'])
-            else:
-                outImage = predictions
-            laplacianA = np.squeeze(DNN.laplace(*outImage).detach().numpy())
-
-            outImageA = outImageA[0].cpu().view(*ego_pixel_shape,2).detach().numpy() 
-            print(outImageA.shape)
-
-            fig2, ax2 = plt.subplots(1,1)
-            ax2.set_title('Histogram of Laplacians')
-            ax2.hist(laplacianA, bins=2000)
-
-
-            coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
-
-            # NORMALIZE
-            vx = outImageA[:,:,0]#.flatten('F')
-            print(type(vx))
-            vy = outImageA[:,:,1]#.flatten('F')
-            ux = vx#/np.sqrt(vx**2+vy**2)
-            uy = vy#/np.sqrt(vx**2+vy**2)
-
-
-            axes[0].quiver(coord_x+.5, coord_y+.5, ux,uy, color='red')#, units='xy' ,scale=1
-
-            ux = vx/np.sqrt(vx**2+vy**2)
-            uy = vy/np.sqrt(vx**2+vy**2)
-
-            axes[1].quiver(coord_x+.5, coord_y+.5, ux,uy, color='red')
-
-            #for traj in test_pix_trajectory.values():
-            trajnp = np.array(test_pix_trajectory)
-            axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
-            axes[1].plot(trajnp[:,0], trajnp[:,1], 'r')
-                #axes[0].plot(tpix, logrpix, 'r')
-                #axes[1].plot(tpix, logrpix, 'r')
-
-            #print(testpos)
-            axes[0].plot(*test_pix_trajectory[-1], 'co',markersize=2)
-            axes[1].plot(*test_pix_trajectory[-1], 'co',markersize=2)
-
-            #for obs_traj in obstacle_trajectory.values():
-            #    trajnp = np.array(obs_traj)
-            #    axes[0].plot(trajnp[:,0], trajnp[:,1], 'c')
-            #    axes[1].plot(trajnp[:,0], trajnp[:,1], 'c')
-
-
-        
-            cax = fig.add_axes([.3, .95, .4, .05])
-            fig.colorbar(tempval, cax, orientation='horizontal')
-            #fig.colorbar(outImagea, axes[0], orientation='vertical')
-
-
-            load_offset = 1 if LOAD_NETWORK_FROM_DISK else 0
-            fig, axes = plt.subplots(1,3 + load_offset)
-            fig.suptitle('Comparison of Network Output with Ground Truth')
-            trajnp = np.array(test_pix_trajectory)
-
-            boundsX = (0,ego_pixel_shape[1])
-            boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-        
-        
-            if (LOAD_NETWORK_FROM_DISK):
-                axes[0].set_title('Image (Original)')
-                axes[0].set_aspect(1)
-                axes[0].imshow(raw_image)
-                axes[0].plot(raw_trajectory[0], raw_trajectory[1], 'r')
-        
-            axes[0+load_offset].set_title('Input Image (Unnormalized)')
-            axes[0+load_offset].set_aspect(1)
-            axes[0+load_offset].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
-        
-            axes[1+load_offset].set_title('Network with GT Traj')
-            axes[1+load_offset].set_xlim(*boundsX)
-            axes[1+load_offset].set_ylim(*boundsY)
-            axes[1+load_offset].set_aspect(1)
-            axes[1+load_offset].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
-            axes[1+load_offset].plot(trajnp[:,0], trajnp[:,1], 'r')
-    
-            axes[2+load_offset].set_title('GT Value with GT Traj')
-            axes[2+load_offset].set_xlim(*boundsX)
-            axes[2+load_offset].set_ylim(*boundsY)
-            axes[2+load_offset].set_aspect(1)
-            axes[2+load_offset].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
-            axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'r')
-
-            #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
-
-            #ax.quiver(gradient_samples[0][:,0], gradient_samples[0][:,1], gradient_samples[1][:,0],gradient_samples[1][:,1], color='red', scale_units='xy', scale=1)#, units='xy' ,scale=1
-
-            #ux = vx/np.sqrt(vx**2+vy**2)
-            #uy = vy/np.sqrt(vx**2+vy**2)
-        
-            #for traj in test_pix_trajectory.values():
-
-            #plt.show()
+    model.eval()
 
 
 
 
-
-
-
-
-
-
-            #axes[1,0].imshow(a_star_map_x, extent=[*boundsX, *boundsY], interpolation='none')
-            #axes[1,1].imshow(a_star_map_y, extent=[*boundsX, *boundsY], interpolation='none')
-
-
-            plt.show()
 

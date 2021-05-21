@@ -130,7 +130,7 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    folder_path = 'S:\\fut_loc\\test\\20150402_walk\\'#'S:\\fut_loc\\train\\20150401_walk_00\\'
+    folder_path = 'S:\\fut_loc\\test\\20150402_grocery\\'#'S:\\fut_loc\\train\\20150401_walk_00\\'#'S:\\fut_loc\\test\\20150402_walk\\'#20150419_ikea
 
     # load calibration
     print('loading calibration file')
@@ -204,7 +204,7 @@ if __name__ == "__main__":
 
 
     #iFrame = 0
-    for iFrame in range(32,38):
+    for iFrame in range(10,38):
         tr = vTR['vTr'][iFrame]
         if (len(tr['XYZ'][1]) == 0):
             print('SKIPPING FRAME',iFrame,': Trajectory is empty.')
@@ -246,7 +246,7 @@ if __name__ == "__main__":
 
 
         r_y = -tr['up']/np.linalg.norm(tr['up'])
-        old_r_z = np.array([0,0,1])
+        old_r_z = np.array([0,0,1]) #tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0]) #np.array([0,0,1])
         r_z = old_r_z - (old_r_z@r_y)*r_y
         r_z /= np.linalg.norm(r_z)
         r_x = np.cross(r_y, r_z)
@@ -263,7 +263,8 @@ if __name__ == "__main__":
         # set up egocentric image information in log polar space
         
         tr_ground_ALIGNED = R_rect_ego @ tr_ground_OG # ALIGN CAMERA SPACE GROUND PLANE TO "WORLD SPACE"
-
+        #tr_ground_ALIGNED = R_rect_ego @ tr['XYZ'].T - R_rect_ege @ tr['up'] # ALIGN CAMERA SPACE GROUND PLANE TO "WORLD SPACE"
+        
         t, r = Coord2Polar(tr_ground_ALIGNED[2],tr_ground_ALIGNED[0])#Coord2Polar(tr['XYZ'][2],tr['XYZ'][0])
         logr = np.log(r)
 
@@ -281,7 +282,10 @@ if __name__ == "__main__":
         axes[0].set_title('Traj in image')
         #axes[0].set_xlim(*newBoundsx)
         #axes[0].set_ylim(*crowdBoundsY)
-        #axes[0].set_aspect(1)
+        
+        axes[0].set_xlim(0,img.shape[1])
+        axes[0].set_ylim(img.shape[0],0)
+        axes[0].set_aspect(1)
         axes[0].imshow(img)
         axes[0].plot(tr_ground[0], tr_ground[1], 'r')
 
@@ -315,7 +319,7 @@ if __name__ == "__main__":
             denoms = n @ L
             t = np.zeros(len(denoms))
             intersecting = np.where(denoms > 1e-6)
-            d = plane_offset @ n
+            d = - plane_offset @ n
             result = np.divide( d[None], denoms[intersecting])
             t[intersecting] = result
             return t
@@ -327,7 +331,7 @@ if __name__ == "__main__":
         depth_pixel_coords = np.array( [ [j+.5,i+.5,1.0] for i in range(img_rectified.shape[0]) for j in range(img_rectified.shape[1]) ], dtype=np.float32)
 
         #pixel = np.array([j,i,1])
-        p_normal = -tr['up']/np.linalg.norm(tr['up'])
+        p_normal = tr['up']/np.linalg.norm(tr['up'])
         p_origin = -tr['up'] #camera assumed to be at 0,0,0
         e_origin = np.zeros(3) #zero vector
         e_rays = R_rect.T @ np.linalg.inv(K_data) @ depth_pixel_coords.T #+0
@@ -353,14 +357,14 @@ if __name__ == "__main__":
 
         #depths = intersectPlane(p_normal,p_origin,e_origin,e_ray)
         rad_img = np.reshape(tnorm, depth_img.shape)
-        #depth_img = np.reshape(depths, depth_img.shape)
+        depth_img = np.reshape(depths, depth_img.shape)
         #print(depth_img.max())
         #print(depth_img.min())
-        #depth_img = np.clip(depth_img,0,1)
+        depth_img = np.clip(depth_img,0,1)
 
         
         axes[3].set_title('Plane image')
-        axes[3].imshow(rad_img, cmap='jet')
+        axes[3].imshow(depth_img, cmap='jet')
 
 
         
@@ -382,6 +386,182 @@ if __name__ == "__main__":
 
        
 
+        # DRAW 3D GRAPH
+        ax = plt.axes(projection='3d')
+        #ax.scatter(frames['C'].T[0],frames['C'].T[1],frames['C'].T[2], s=1)
+        #keys = np.sort(np.array(list(frames.keys())))
+
+        
+        #start = frames[valid_frames[0]]['C']
+        #ax.plot(start[0],start[1],start[2],'bo',markerSize=10)
+        
+        #scale = .5
+        #if True:
+        #    R = R_rect
+        #    center = np.zeros(3)
+
+        #    plane_origin = -tr['up']
+
+
+        #    x_delta = np.zeros(2)
+        #    y_delta = np.zeros(2)
+        #    z_delta = np.zeros(2)
+            
+        #    x_delta[0] = center[0]
+        #    y_delta[0] = center[1]
+        #    z_delta[0] = center[2]
+            
+        #    x_delta[1] = center[0] + plane_origin[0]
+        #    y_delta[1] = center[1] + plane_origin[1]
+        #    z_delta[1] = center[2] + plane_origin[2]
+        #    ax.plot(x_delta,y_delta,z_delta,'k--',linewidth=1)
+
+
+
+
+        
+        #    x_delta = np.zeros(2)
+        #    y_delta = np.zeros(2)
+        #    z_delta = np.zeros(2)
+            
+        #    #center = frames[key]['C']
+        #    x_delta[0] = center[0]
+        #    y_delta[0] = center[1]
+        #    z_delta[0] = center[2]
+            
+
+        #    #print(R)
+        #    axis = R[0] * scale
+        #    #axis2 = R[0]
+        #    #axis *= scale
+        #    #axis2 *= scale
+        #    x_delta[1] = center[0] + axis[0]
+        #    y_delta[1] = center[1] + axis[1]
+        #    z_delta[1] = center[2] + axis[2]
+        #    ax.plot(x_delta,y_delta,z_delta, color='#880000',linewidth=1)
+
+        
+        #    x_delta = np.zeros(2)
+        #    y_delta = np.zeros(2)
+        #    z_delta = np.zeros(2)
+            
+        #    x_delta[0] = center[0]
+        #    y_delta[0] = center[1]
+        #    z_delta[0] = center[2]
+            
+        #    axis = R[1] * scale
+        #    x_delta[1] = center[0] + axis[0]
+        #    y_delta[1] = center[1] + axis[1]
+        #    z_delta[1] = center[2] + axis[2]
+        #    ax.plot(x_delta,y_delta,z_delta,'#008800',linewidth=1)
+
+
+        #    x_delta = np.zeros(2)
+        #    y_delta = np.zeros(2)
+        #    z_delta = np.zeros(2)
+            
+        #    x_delta[0] = center[0]
+        #    y_delta[0] = center[1]
+        #    z_delta[0] = center[2]
+            
+            
+        #    axis = R[2] * scale
+        #    x_delta[1] = center[0] + axis[0]
+        #    y_delta[1] = center[1] + axis[1]
+        #    z_delta[1] = center[2] + axis[2]
+        #    ax.plot(x_delta,y_delta,z_delta,'#000088',linewidth=1)
+
+        #if True:
+        #    R = R_rect_ego
+        #    center = np.zeros(3)
+        
+        #    x_delta = np.zeros(2)
+        #    y_delta = np.zeros(2)
+        #    z_delta = np.zeros(2)
+            
+        #    #center = frames[key]['C']
+        #    x_delta[0] = center[0]
+        #    y_delta[0] = center[1]
+        #    z_delta[0] = center[2]
+            
+
+        #    #print(R)
+        #    axis = R[0] * scale
+        #    #axis2 = R[0]
+        #    #axis *= scale
+        #    #axis2 *= scale
+        #    x_delta[1] = center[0] + axis[0]
+        #    y_delta[1] = center[1] + axis[1]
+        #    z_delta[1] = center[2] + axis[2]
+        #    ax.plot(x_delta,y_delta,z_delta,color='r',linewidth=2)
+
+        
+        #    x_delta = np.zeros(2)
+        #    y_delta = np.zeros(2)
+        #    z_delta = np.zeros(2)
+            
+        #    x_delta[0] = center[0]
+        #    y_delta[0] = center[1]
+        #    z_delta[0] = center[2]
+            
+        #    axis = R[1] * scale
+        #    x_delta[1] = center[0] + axis[0]
+        #    y_delta[1] = center[1] + axis[1]
+        #    z_delta[1] = center[2] + axis[2]
+        #    ax.plot(x_delta,y_delta,z_delta,'g',linewidth=2)
+
+
+        #    x_delta = np.zeros(2)
+        #    y_delta = np.zeros(2)
+        #    z_delta = np.zeros(2)
+            
+        #    x_delta[0] = center[0]
+        #    y_delta[0] = center[1]
+        #    z_delta[0] = center[2]
+            
+            
+        #    axis = R[2] * scale
+        #    x_delta[1] = center[0] + axis[0]
+        #    y_delta[1] = center[1] + axis[1]
+        #    z_delta[1] = center[2] + axis[2]
+        #    ax.plot(x_delta,y_delta,z_delta,'b',linewidth=2)
+
+        ##n_frames = tr_ground_OG.shape[1]
+        ##x = np.zeros(n_frames)
+        ##y = np.zeros(n_frames)
+        ##z = np.zeros(n_frames)
+        ##count = 0
+        ##for i in range(n_frames):
+        ##    C = tr_ground_OG[:,i]
+        ##    x[count] = C[0]
+        ##    y[count] = C[1]
+        ##    z[count] = C[2]
+        ##    count += 1
+
+
+        #ax.plot(tr_ground_OG[0],tr_ground_OG[1],tr_ground_OG[2],'ko')
+        #ax.plot(tr_ground_ALIGNED[0],tr_ground_ALIGNED[1],tr_ground_ALIGNED[2],'bo')
+        
+        
+        
+        
+        #max_range = np.array([tr_ground_OG[0].max()-tr_ground_OG[0].min(), tr_ground_OG[1].max()-tr_ground_OG[1].min(), tr_ground_OG[2].max()-tr_ground_OG[2].min()]).max() / 2.0
+
+        #mean_x = tr_ground_OG[0].mean()
+        #mean_y = tr_ground_OG[1].mean()
+        #mean_z = tr_ground_OG[2].mean()
+        #ax.set_xlim(mean_x - max_range, mean_x + max_range)
+        #ax.set_ylim(mean_y - max_range, mean_y + max_range)
+        #ax.set_zlim(mean_z - max_range, mean_z + max_range)
+
+
+
+
+
+        #ax.set_xlabel('X axis')
+        #ax.set_ylabel('Y axis')
+        #ax.set_zlabel('Z axis')
+        #plt.show()
 
 
 
@@ -396,7 +576,7 @@ if __name__ == "__main__":
         maxT = np.pi/3 #2*np.pi/3
         minT = -maxT
 
-        aspect_ratio = 3/4 #(2*maxT-2*minT)/(maxR-minR)
+        aspect_ratio = 1# 3/4 #(2*maxT-2*minT)/(maxR-minR)
         ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
         big_ego_pixel_shape = ego_pixel_shape#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
 
@@ -637,9 +817,31 @@ if __name__ == "__main__":
             #axes[0].set_xlim(*newBoundsx)
             #axes[0].set_ylim(*crowdBoundsY)
             #axes[0].set_aspect(1)
+            
+            axes[0].set_xlim(0,img.shape[1])
+            axes[0].set_ylim(img.shape[0],0)
+            axes[0].set_aspect(1)
             axes[0].imshow(img)
-            axes[0].plot(tr_ground[0], tr_ground[1], 'ro')
+            axes[0].plot(tr_ground[0], tr_ground[1], 'rx')
 
+            
+            bigtpix = big_ego_t2pix(t)
+            bigrpix = big_ego_r2pix(logr)
+
+                       
+            z, x = Polar2Coord(t,np.exp(logr))
+            
+            coords_3D = np.zeros((len(z),3))
+            coords_3D[:,1] = 0
+            coords_3D[:,0] = x
+            coords_3D[:,2] = z
+            coords_3D = (R_rect_ego.T @ coords_3D.T).T
+            coords_3D -= tr['up'].T
+
+            pixels = K_data @ R_rect @ coords_3D.T
+            pixels /= pixels[2]
+
+            axes[0].plot(pixels[0],pixels[1],'b.')
         
             #axes[1].set_title('Traj in EgoMap')
             #axes[1].set_xlim((-2*np.pi/3, 2*np.pi/3))
@@ -666,10 +868,10 @@ if __name__ == "__main__":
             bigtpix = big_ego_t2pix(t)
             bigrpix = big_ego_r2pix(logr)
 
-            axes[1].plot(bigtpix,bigrpix, 'ro')
+            axes[1].plot(bigtpix,bigrpix, 'rx')
 
 
-            axes[1].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'bo')
+            #axes[1].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'bo')
 
 
 
@@ -695,7 +897,7 @@ if __name__ == "__main__":
             bigtpix = big_ego_t2pix(t)
             bigrpix = big_ego_r2pix(logr)
 
-            axes[2].plot(bigtpix,bigrpix, 'r')
+            axes[2].plot(bigtpix,bigrpix, 'rx')
 
 
             #axes[2].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'b')
@@ -710,10 +912,10 @@ if __name__ == "__main__":
             axes[3].imshow(img)
 
             axes[3].plot(pixels[0,:],pixels[1,:],'bo')
-
-            plt.show()
+            
             figManager = plt.get_current_fig_manager()
             figManager.window.showMaximized()
+            plt.show()
             #cv2.imshow('intermediate',intermediate)
             #cv2.waitKey()
 

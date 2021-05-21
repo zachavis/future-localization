@@ -1,4 +1,3 @@
-
 import sys
 from sys import platform
 import os
@@ -158,11 +157,11 @@ USE_EGO = True
 if __name__ == "__main__":
     #DNN.current_epoch = 0
 
-    BATCH_SIZE = 1
+    BATCH_SIZE = 16
     N_WORKERS = 0
     
     # TODO put these values in a settings file on disk to force uniformity across programs
-    img_height = 196#128#64
+    img_height = 256#128#64
 
     minR = -.5
     maxR = 4#5 #4.5
@@ -250,9 +249,10 @@ if __name__ == "__main__":
 
 
 
-    # LOADING VARIABLES
+   # LOADING VARIABLES
     RESIZED_IMAGE_DICTIONARY = {} # could probably pre-allocate this into a big numpy array...
     LOG_POLAR_TRAJECTORY_DICTIONARY = {}
+    COORD_TRAJECTORY_DICTIONARY = {}
     PIXEL_TRAJECTORY_DICTIONARY = {}
 
     RAW_IMAGE_DICTIONARY = {}
@@ -261,6 +261,7 @@ if __name__ == "__main__":
     # Testing VARIABLES
     RESIZED_IMAGE_DICTIONARY_TE = {} # could probably pre-allocate this into a big numpy array...
     LOG_POLAR_TRAJECTORY_DICTIONARY_TE = {}
+    COORD_TRAJECTORY_DICTIONARY_TE = {}
     PIXEL_TRAJECTORY_DICTIONARY_TE = {}
 
     RAW_IMAGE_DICTIONARY_TE = {}
@@ -269,6 +270,7 @@ if __name__ == "__main__":
     # Training VARIABLES
     RESIZED_IMAGE_DICTIONARY_TR = {} # could probably pre-allocate this into a big numpy array...
     LOG_POLAR_TRAJECTORY_DICTIONARY_TR = {}
+    COORD_TRAJECTORY_DICTIONARY_TR = {}
     PIXEL_TRAJECTORY_DICTIONARY_TR = {}
 
     RAW_IMAGE_DICTIONARY_TR = {}
@@ -283,6 +285,7 @@ if __name__ == "__main__":
         if data_subset == 'train':
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TR
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TR
+            COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TR
             PIXEL_TRAJECTORY_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TR
 
             RAW_IMAGE_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TR
@@ -292,6 +295,7 @@ if __name__ == "__main__":
         if data_subset == 'test':
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TE
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TE
+            COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TE
             PIXEL_TRAJECTORY_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TE
 
             RAW_IMAGE_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TE
@@ -705,10 +709,13 @@ if __name__ == "__main__":
                 RESIZED_IMAGE_DICTIONARY[dictionary_index] = img_channel_swap
                 PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []
+                COORD_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 for pix in future_trajectory:
                     PIXEL_TRAJECTORY_DICTIONARY[dictionary_index].append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
-                    newpoint = ( Polar2Coord( ego_pix2t(pix[0]),np.exp(ego_pix2r(pix[1])) ) )
-                    LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index].append( newpoint )
+                    logpolar_coord = (ego_pix2t(pix[0]),ego_pix2r(pix[1]))
+                    newpoint = ( Polar2Coord( logpolar_coord[0],np.exp(logpolar_coord[1]) ) )
+                    LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index].append( logpolar_coord )
+                    COORD_TRAJECTORY_DICTIONARY[dictionary_index].append( newpoint )
         
                 #for i in range(len(logrpix)):
                 #    LOG_POLAR_TRAJECTORY_DICTIONARY[iFrame].append( (tpix[i], logrpix[i]) ) # t is horizontal axis, logr is vertical
@@ -792,11 +799,17 @@ if __name__ == "__main__":
         #hyper_trajectory_data_set = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
 
-        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
 
-        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
+
+
+        #hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        ##i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
+
+        #hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        ##i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
+
+        hyper_trajectory_data_set_tr = DataGens.MassiveAutoEncoderTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord)
+        hyper_trajectory_data_set_te = DataGens.MassiveAutoEncoderTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord)
 
 
 
@@ -814,12 +827,12 @@ if __name__ == "__main__":
 
 
         #Training parameters
-        num_epochs = 300 #15000 #1000
+        num_epochs = 2500 #15000 #1000
         print_interval = 1
         learning_rate = 5e-5#1e-5
         #loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()
         #loss_function2 = DNN.laplacian_mse_with_coords
-        loss_function3 = DNN.value_mse_with_coords
+        loss_function3 = DNN.auto_encoder_loss_with_coords
         
 
         #trajectory_training_dataset = trajectory_data_set
@@ -875,7 +888,9 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
         #loss_function = nn.MSELoss()
         #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
-        testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        testModel = DNN.ConvolutionalAutoEncoderToPath(in_features=3,path_length=25,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        
+        #DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
         testModel.cuda()
         testModel.eval()
         #testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,*img_channel_swap.shape)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
@@ -904,9 +919,10 @@ if __name__ == "__main__":
         
         print("Total Parameter count:", DNN.CountParameters(network))
         print("Encoder Params:",DNN.CountParameters(network.encoder))
-        print("Hyper Params:",DNN.CountParameters(network.hyper_net))
-        print("Hypo/SIREN Params:",DNN.CountParameters(network.hypo_net))
-        print("Walkable Params:",DNN.CountParameters(network.multiplier_net))
+        print("Dencoder Params:",DNN.CountParameters(network.decoder))
+        #print("Hyper Params:",DNN.CountParameters(network.hyper_net))
+        #print("Hypo/SIREN Params:",DNN.CountParameters(network.hypo_net))
+        #print("Walkable Params:",DNN.CountParameters(network.multiplier_net))
 
 
 

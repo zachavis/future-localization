@@ -743,6 +743,82 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
 
 
 
+
+class MassiveAutoEncoderTrajectoryDataset(torch.utils.data.Dataset):
+  'Characterizes a dataset for PyTorch'
+  def __init__(self, trajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
+    'Initialization'
+    
+    self.trajectories = trajectories # log polar space please
+
+    #self.obstacles = obstacles
+    #self.obstacle_multiplier = multiplier
+    #self.buffer = .1
+    self.recenteringFn = recenteringFn
+    self.uncenteringFn = uncenteringFn
+    self.images = images
+    self.totalpoints = numItems
+
+    self.img_points = img_points.astype(np.float32)
+    self.datascale = 1
+    self.pix2tfn = pix2tfn
+    self.pix2rfn = pix2rfn
+    self.polarfn = polarfn
+
+    self.datalength = len(images)
+    self.width = .5
+    self.random = random
+
+    self.trajLength = 25
+
+
+
+  def __len__(self):
+    'Denotes the total number of samples'
+    return self.datalength
+
+  def GetImageTrajectoryPair(self,index):
+      
+    key = list(self.images.keys())[index]
+
+
+    
+    if self.random:
+        input = self.uncenteringFn((np.random.rand(self.totalpoints,2)*2.0-1.0).astype(np.float32))
+    else:
+    #random_choice = np.random.choice(len(self.img_points), size=150, replace=False)
+        input = np.copy(self.img_points)
+    xformed_input = np.zeros(input.shape)
+    xformed_input[:,0] = self.pix2tfn(input[:,0])
+    xformed_input[:,1] = np.exp(self.pix2rfn(input[:,1]))
+
+    xformed_input = np.array(self.polarfn(xformed_input[:,0],xformed_input[:,1])).T
+
+    
+    traj = self.trajectories[key]
+    tx, ty = InterpAlongLine(traj[0],traj[1],self.trajLength)
+    output = self.recenteringFn(np.vstack((tx,ty)))
+
+    
+    #output = ( np.expand_dims(Coords2ValueFastWS(xformed_input,{0:self.trajectories[key]},None,None,self.width),-1) / self.datascale).astype(np.float32)
+    
+    
+    return {'img_sparse':self.images[key], 'coords':self.recenteringFn(input)}, output#self.recenteringFn(input), output #
+
+
+  def __getitem__(self, index):
+    'Generates one sample of data'
+    return self.GetImageTrajectoryPair(index)
+
+
+
+
+
+
+
+
+
+
 # Using Engineered Value Functions
 # TODO: DOES NOT YET SUPPORT MULTIPLE TRAJECTORIES
 def Coords2ValueFast(all_pixel_coords, trajectory_dictionary, nscale = 1):
@@ -1001,3 +1077,20 @@ class GTFieldDataset(torch.utils.data.Dataset):
   def __getitem__(self, index):
     'Generates one sample of data'
     return self.GetRandomSamples()
+
+
+
+def InterpAlongLine(x,y,n, end = -1):
+    xd = np.diff(x)
+    yd = np.diff(y)
+    dist = np.sqrt(xd**2+yd**2)
+    u = np.cumsum(dist)
+    u = np.hstack([[0],u])
+    
+    if end < 0:
+        t = np.linspace(0,u.max(),n)
+    else:
+        t = np.linspace(0,end,n)
+    xn = np.interp(t, u, x)
+    yn = np.interp(t, u, y)
+    return xn, yn

@@ -138,9 +138,10 @@ class ConvImgEncoder(nn.Module):
     def __init__(self, channel, image_resolution, latent_dimension = 256):
         super().__init__()
         self.sub_latent_dimension = latent_dimension//2
+        self.initial_kernel = 21
 
         # conv_theta is input convolution
-        self.conv_theta = nn.Conv2d(channel, self.sub_latent_dimension, 21, 1, 21//2)
+        self.conv_theta = nn.Conv2d(channel, self.sub_latent_dimension, self.initial_kernel, 1, self.initial_kernel//2)
         self.relu = nn.ReLU(inplace=True)
         self.latent_dimension = latent_dimension
 
@@ -173,9 +174,10 @@ class ConvImgIntensity(nn.Module):
     def __init__(self, channel, image_resolution, latent_dimension = 256):
         super().__init__()
         self.sub_latent_dimension = latent_dimension//2
+        self.initial_kernel = 21
 
         # conv_theta is input convolution
-        self.conv_theta = nn.Conv2d(channel, self.sub_latent_dimension, 21, 1, 21//2)
+        self.conv_theta = nn.Conv2d(channel, self.sub_latent_dimension, self.initial_kernel, 1, self.initial_kernel//2)
         self.relu = nn.ReLU(inplace=True)
         self.latent_dimension = latent_dimension
         self.sig = nn.Sigmoid()
@@ -710,6 +712,58 @@ class ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(nn.Module):
 
 
 
+
+class ConvolutionalAutoEncoderToPath(nn.Module):
+    def __init__(self, in_features, path_length, image_resolution=None, partial_conv=False):
+        super().__init__()
+        self.latent_dim = LATENT_DIMENSION
+        out_features = 2 * path_length
+
+        if partial_conv:
+            self.encoder = PartialConvImgEncoder(channel=in_features, image_resolution=image_resolution)
+        else:
+            self.encoder = ConvImgEncoder(channel=in_features, image_resolution=image_resolution, latent_dimension = self.latent_dim)
+        
+        self.decoder =  FCBlock(in_features=self.latent_dim//2, out_features=out_features, num_hidden_layers=3,hidden_features=256,outermost_linear=True,nonlinearity='relu')  #Siren(in_features=2, out_features=out_features, #modules.SingleBVPNet(out_features=out_features, type='sine', sidelength=image_resolution, in_features=2)
+        
+        #self.hyper_net = HyperNetwork(hyper_in_features=latent_dim, hyper_hidden_layers=1, hyper_hidden_features=256,
+        #                              hypo_module=self.hypo_net)
+
+        #self.multiplier_net = ConvImgIntensity(channel=in_features, image_resolution=image_resolution, latent_dimension = latent_dim)
+
+
+
+        print(self)
+
+    def reparameterize(self, mu, logVar):
+        std=torch.exp(logVar/2)
+        eps=torch.randn_like(std)
+        return mu + std * eps
+
+
+    def forward(self, model_input):
+        if model_input.get('embedding', None) is None:
+            embedding = self.encoder(model_input['img_sparse'])
+        else:
+            embedding = model_input['embedding']
+        #hypo_params = self.hyper_net(embedding)
+
+        mu = embedding[:,:self.latent_dim//2]
+        
+        logVar = embedding[:,self.latent_dim//2:]
+
+        z = self.reparameterize(mu,logVar)
+
+        model_output = self.decoder(z)
+        model_output = torch.reshape(model_output,(model_output.shape[0],2,-1))
+
+
+        return {'model_in': model_input, 'model_out':model_output, 'latent_vec': embedding,
+                'mu': mu, 'logVar': logVar, 'sample':z}
+
+
+
+
 def train2(network,  data_generators, loss_functions, optimizer, epoch):
   network.train() #updates any network layers that behave differently in training and execution 
   avg_loss = 0
@@ -1017,9 +1071,18 @@ def laplacian_mse(model_outputs, coords, gt_laplacian, epoch):
 laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds['model_out'],preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
 
 
+def auto_encoder_loss(model_outputs_dict, model_input, gt_value, epoch ):
+    
+    mu = model_outputs_dict['mu']
+    logVar = model_outputs_dict['logVar']
+    
+    kl_divergence = 0.5 * torch.sum(-1 - logVar + mu.pow(2) + logVar.exp())
 
+    loss = kl_divergence + torch.nn.L1Loss()(model_outputs_dict['model_out'],gt_value)
 
+    return loss
 
+auto_encoder_loss_with_coords = lambda preds,gt,epoch: auto_encoder_loss(preds,preds['model_in'], gt,epoch)
 
 def value_mse(model_outputs_dict, coords, gt_value, epoch):
     #model_outputs = torch.squeeze(model_outputs,-1)
@@ -1066,19 +1129,16 @@ value_mse_with_coords = lambda preds,gt,epoch: value_mse(preds,preds['model_in']
 
 
 
-#def value_mse(model_outputs_dict, coords, gt_value, epoch):
-#    #model_outputs = torch.squeeze(model_outputs,-1)
-#    #multiplier = torch.zeros(coords.shape)
-
-    
-#    intensity =  model_outputs_dict['intensity']*.9 + .1
-#    regularizer_batch = torch.mean(intensity,dim=[1,2])
-#    regularizer = torch.mean(regularizer_batch)/20.0
+def old_value_mse(model_outputs_dict, coords, gt_value, epoch):
+    #model_outputs = torch.squeeze(model_outputs,-1)
+    #multiplier = torch.zeros(coords.shape)
 
 
-#    model_outputs = torch.relu(-model_outputs_dict['model_out']) + .1 # SIREN values should be between -inf and 0, although initially there could be positive values. This is essentially a ReLU
-#    multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
-#    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
-#    value_loss = torch.nn.L1Loss()(model_outputs * multiplier, gt_value * multiplier) + regularizer
-#    print("intensity loss:", regularizer)
-#    return value_loss
+    model_outputs = model_outputs_dict['model_out']
+    multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+    value_loss = torch.nn.L1Loss()(model_outputs * multiplier, gt_value * multiplier)
+    #print("intensity loss:", regularizer)
+    return value_loss
+
+old_value_mse_with_coords = lambda preds,gt,epoch: old_value_mse(preds,preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
