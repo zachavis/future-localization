@@ -399,7 +399,7 @@ if __name__ == "__main__":
 
                 tr = vTR['vTr'][iFrame]
                 if (len(tr['XYZ'][1]) < 2):
-                    print('FROM FOLDER', folder_name,'SKIPPING FRAME',iFrame,': Trajectory is deficient (less than 2 points)')
+                    print('FROM FOLDER', folder_name,'SKIPPING FRAME',iFrame,': \n\tTrajectory is deficient (less than 2 points)')
                     continue
                 else:
                     print('FROM FOLDER', folder_name, 'GETTING FRAME',iFrame )
@@ -425,10 +425,16 @@ if __name__ == "__main__":
         
                 
                 tr_ground = K_data @ R_rect @ tr_ground_OG;
-                if np.any(tr_ground[2,:]<0):
-                    #tr_ground[:2,:] = np.nan # actually maybe I shouldn't NAN here, the only issue is that the trajectory goes behind the camera. Maybe that's okay?
-                    print('\tThe trajectory is suspicious, and may be behind the user. SKIPPING')
-                    continue
+                
+                
+                #if np.any(tr_ground[2,:]<0):
+                #    #tr_ground[:2,:] = np.nan # actually maybe I shouldn't NAN here, the only issue is that the trajectory goes behind the camera. Maybe that's okay?
+                #    print('\tThe trajectory is suspicious, and may be behind the user. SKIPPING')
+                #    continue
+
+
+
+
                 #tr_ground(tr_ground(3,:)<0, :) = NaN;
                 #tr_ground = bsxfun(@rdivide, tr_ground(1:2,:), tr_ground(3,:));
                 tr_ground = tr_ground[:2] / tr_ground[2]
@@ -705,12 +711,27 @@ if __name__ == "__main__":
                 if (LOAD_NETWORK_FROM_DISK):
                     TRAJ_IN_IMAGE_DICTIONARY[dictionary_index] = tr_ground
                     RAW_IMAGE_DICTIONARY[dictionary_index] = img
+
+                # Check if first two pixels are within egomap
+                pix1 = future_trajectory[0]
+                pix2 = future_trajectory[1]
+
+                if (pix1[0] < 0 or pix1[0] > ego_pixel_shape[1] 
+                    or pix1[1] < 0 or pix1[1] > ego_pixel_shape[0]
+                    or pix2[0] < 0 or pix2[0] > ego_pixel_shape[1] 
+                    or pix2[1] < 0 or pix2[1] > ego_pixel_shape[0]):
+
+                    print('\tTrajectory is deficient (start is outside egomap)')
+                    continue
+
             
                 RESIZED_IMAGE_DICTIONARY[dictionary_index] = img_channel_swap
                 PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 COORD_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 for pix in future_trajectory:
+                    if (pix[0] < 0 or pix[0] > ego_pixel_shape[1] or pix[1] < 0 or pix[1] > ego_pixel_shape[0]): # outside ego map
+                        continue
                     PIXEL_TRAJECTORY_DICTIONARY[dictionary_index].append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
                     logpolar_coord = (ego_pix2t(pix[0]),ego_pix2r(pix[1]))
                     newpoint = ( Polar2Coord( logpolar_coord[0],np.exp(logpolar_coord[1]) ) )
@@ -725,7 +746,7 @@ if __name__ == "__main__":
                 #coord_value = DataGens.Coords2ValueFast(all_pixel_coords,future_trajectory,nscale=1)
 
                 if (PRINT_DEBUG_IMAGES):
-                    coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=.5)
+                    coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:COORD_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=.5)
                     fig, ax = plt.subplots(1,1)#, figsize=(36,6))
                     axes = [ax]
 
@@ -738,7 +759,8 @@ if __name__ == "__main__":
                     #axes[1].set_ylim(*boundsY)
 
                     tempval = axes[0].imshow(np.reshape(coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
-        
+                    
+                    pixels = np.array(LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index])
         
                     trajnp = np.array(future_trajectory)
                     axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
@@ -808,8 +830,8 @@ if __name__ == "__main__":
         #hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         ##i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
 
-        hyper_trajectory_data_set_tr = DataGens.MassiveAutoEncoderTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord)
-        hyper_trajectory_data_set_te = DataGens.MassiveAutoEncoderTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord)
+        hyper_trajectory_data_set_tr = DataGens.MassiveAutoEncoderTrajectoryDataset(PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord)
+        hyper_trajectory_data_set_te = DataGens.MassiveAutoEncoderTrajectoryDataset(PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord)
 
 
 

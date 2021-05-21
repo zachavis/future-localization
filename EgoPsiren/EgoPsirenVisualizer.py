@@ -1080,7 +1080,7 @@ if __name__ == "__main__":
             rpix_AlexNet = ego_r2pix(logr_AlexNet)
             
             traj_vae_tpix = ego_t2pix(traj_vae_t)
-            traj_vae_logrpix = ego_t2pix(traj_vae_logr)
+            traj_vae_logrpix = ego_r2pix(traj_vae_logr)
 
                 
             if USE_INTENSITY:

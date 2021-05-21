@@ -749,7 +749,7 @@ class MassiveAutoEncoderTrajectoryDataset(torch.utils.data.Dataset):
   def __init__(self, trajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
     'Initialization'
     
-    self.trajectories = trajectories # log polar space please
+    self.trajectories = trajectories # log polar pixel space please
 
     #self.obstacles = obstacles
     #self.obstacle_multiplier = multiplier
@@ -783,16 +783,16 @@ class MassiveAutoEncoderTrajectoryDataset(torch.utils.data.Dataset):
 
 
     
-    if self.random:
-        input = self.uncenteringFn((np.random.rand(self.totalpoints,2)*2.0-1.0).astype(np.float32))
-    else:
-    #random_choice = np.random.choice(len(self.img_points), size=150, replace=False)
-        input = np.copy(self.img_points)
-    xformed_input = np.zeros(input.shape)
-    xformed_input[:,0] = self.pix2tfn(input[:,0])
-    xformed_input[:,1] = np.exp(self.pix2rfn(input[:,1]))
+    #if self.random:
+    #    input = self.uncenteringFn((np.random.rand(self.totalpoints,2)*2.0-1.0).astype(np.float32))
+    #else:
+    ##random_choice = np.random.choice(len(self.img_points), size=150, replace=False)
+    #    input = np.copy(self.img_points)
+    #xformed_input = np.zeros(input.shape)
+    #xformed_input[:,0] = self.pix2tfn(input[:,0])
+    #xformed_input[:,1] = np.exp(self.pix2rfn(input[:,1]))
 
-    xformed_input = np.array(self.polarfn(xformed_input[:,0],xformed_input[:,1])).T
+    #xformed_input = np.array(self.polarfn(xformed_input[:,0],xformed_input[:,1])).T
 
     
     traj = self.trajectories[key]
@@ -801,9 +801,9 @@ class MassiveAutoEncoderTrajectoryDataset(torch.utils.data.Dataset):
 
     
     #output = ( np.expand_dims(Coords2ValueFastWS(xformed_input,{0:self.trajectories[key]},None,None,self.width),-1) / self.datascale).astype(np.float32)
+    #'coords':self.recenteringFn(input)
     
-    
-    return {'img_sparse':self.images[key], 'coords':self.recenteringFn(input)}, output#self.recenteringFn(input), output #
+    return {'img_sparse':self.images[key]},  output#self.recenteringFn(input), output #
 
 
   def __getitem__(self, index):
