@@ -162,7 +162,7 @@ if __name__ == "__main__":
     N_WORKERS = 0
     
     # TODO put these values in a settings file on disk to force uniformity across programs
-    img_height = 196 #128#64
+    img_height = 192 #128#64
 
     minR = -.5
     maxR = 4#5 #4.5
@@ -400,7 +400,7 @@ if __name__ == "__main__":
 
                 tr = vTR['vTr'][iFrame]
                 if (len(tr['XYZ'][1]) < 2):
-                    print('FROM FOLDER', folder_name,'SKIPPING FRAME',iFrame,': Trajectory is deficient (less than 2 points)')
+                    print('FROM FOLDER', folder_name,'SKIPPING FRAME',iFrame,': \n\tTrajectory is deficient (less than 2 points)')
                     continue
                 else:
                     print('FROM FOLDER', folder_name, 'GETTING FRAME',iFrame )
@@ -828,10 +828,10 @@ if __name__ == "__main__":
         #hyper_trajectory_data_set = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
 
-        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
 
-        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDataset(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
 
 

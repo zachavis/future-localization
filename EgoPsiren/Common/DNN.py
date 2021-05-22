@@ -1342,9 +1342,11 @@ def auto_encoder_loss(model_outputs_dict, model_input, gt_value, epoch ):
 
 auto_encoder_loss_with_coords = lambda preds,gt,epoch: auto_encoder_loss(preds,preds['model_in'], gt,epoch)
 
-def value_mse(model_outputs_dict, coords, gt_value_dict, epoch, dim=(196,196)):
+def value_mse(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192,192)):
     #model_outputs = torch.squeeze(model_outputs,-1)
     #multiplier = torch.zeros(coords.shape)
+
+    upper_end = dim[0]
 
     mask = model_outputs_dict['intensity']
    

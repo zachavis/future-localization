@@ -45,10 +45,11 @@ if __name__ == "__main__":
     #overfit_ego_map_with_mask_newnewloss
     #overfit_skinny_exp_all_imgs
     #overfit_ego_map_all_imgs
-    #overfit_ego_map_with_mask_newnewloss.pt
-    
-    network = torch.load('overfit_ego_map_with_mask_newnewloss_square256_55kernel.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
-    vae_network = torch.load('overfit_autoencoder_minitest.pt')
+    #overfit_ego_map_with_mask_newnewloss.pt #196, 3/4
+    #overfit_ego_map_with_mask_newnewloss_square256_55kernel.pt #256, 1
+    #'overfit_test_network_exp_with_goal.pt'
+    network = torch.load('overfit_ego_map_with_mask_newnewloss_square192_55kernel_aligned.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
+    vae_network = torch.load('overfit_AutoEncoder192_aligned.pt')
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
         network = network.module
@@ -64,9 +65,9 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path = 'S:\\fut_loc\\test\\' #20150401_walk_00\\'
+    partial_folder_path = 'S:\\fut_loc\\train\\' #20150401_walk_00\\'
     
-    folder_name =   '20150402_grocery' #'20150418_mall_00' #'20150401_walk_00' #'20150419_ikea' #
+    folder_name =   '20150401_walk_00' #'20150419_ikea' #'20150402_grocery' #'20150418_mall_00' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -253,7 +254,7 @@ if __name__ == "__main__":
 
 
             
-            img_height = 256 #196 #128
+            img_height = 192 # 256 #196 #128
 
             minR = -.5
             maxR = 4 #5#4.5
@@ -359,6 +360,7 @@ if __name__ == "__main__":
             aspect_ratio = 1#3/4#(maxT-minT)/(maxR-minR)
             ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
             ego_pixel_shape_AlexNet = (256,256)
+            ego_pixel_shape_VAE = ego_pixel_shape
 
             ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
             ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[1]  )
@@ -366,6 +368,9 @@ if __name__ == "__main__":
         
             ego_pix2r = lambda x : RemapRange(x, 0, ego_pixel_shape[0], minR,maxR   )
             ego_pix2t = lambda x : RemapRange(x,0,ego_pixel_shape[1], minT,maxT  )
+
+            ego_pix2r_VAE = lambda x : RemapRange(x, 0, ego_pixel_shape[0], minR,maxR   )
+            ego_pix2t_VAE = lambda x : RemapRange(x,0,ego_pixel_shape[1], minT,maxT  )
 
             
             ego_pix2r_AlexNet = lambda x : RemapRange(x, 0, ego_pixel_shape_AlexNet[0], minR,maxR   )
@@ -379,6 +384,7 @@ if __name__ == "__main__":
 
             RecenterTrajDataBackward = lambda x : RecenterDataBackwardWithShape(x,ego_pixel_shape)
             RecenterTrajDataBackward_AlexNet =  lambda x : RecenterDataBackwardWithShape(x,ego_pixel_shape_AlexNet)
+            RecenterTrajDataBackward_VAE = lambda x : RecenterDataBackwardWithShape(x,ego_pixel_shape)
         
             RecenterDataBackwardWithShapeAndScale = lambda x, shape, scale : RemapRange(x,-scale,scale,0,max(shape[0],shape[1]))
             RecenterFieldDataBackward = lambda x : RecenterDataBackwardWithShapeAndScale(x,ego_pixel_shape,1)
@@ -642,6 +648,7 @@ if __name__ == "__main__":
             
             #RESIZED_IMAGE_DICTIONARY[dictionary_index] = img_channel_swap
             test_image = img_channel_swap
+            test_image_VAE = img_channel_swap
             test_image_AlexNet = img_channel_swap_AlexNet
 
             outputs_AlexNet = AlexNet(torch.unsqueeze(torch.from_numpy(test_image_AlexNet),0))
@@ -736,10 +743,10 @@ if __name__ == "__main__":
             #vae_network.cpu()
             
             
-            predictions_vae = vae_network({'img_sparse':torch.unsqueeze(torch.from_numpy(test_image_AlexNet),0).cuda()})
-            traj_vae = RecenterTrajDataBackward_AlexNet(np.squeeze(predictions_vae['model_out'].detach().cpu().numpy()))
-            traj_vae_t = ego_pix2t_AlexNet(traj_vae[0]) #traj_vae[0]#
-            traj_vae_logr = ego_pix2r_AlexNet(traj_vae[1]) #traj_vae[1]#
+            predictions_vae = vae_network({'img_sparse':torch.unsqueeze(torch.from_numpy(test_image_VAE),0).cuda()})
+            traj_vae = RecenterTrajDataBackward_VAE(np.squeeze(predictions_vae['model_out'].detach().cpu().numpy()))
+            traj_vae_t = ego_pix2t_VAE(traj_vae[0]) #traj_vae[0]#
+            traj_vae_logr = ego_pix2r_VAE(traj_vae[1]) #traj_vae[1]#
 
             if not USE_INTENSITY:
                 image_siren_coords_tensor = torch.unsqueeze( torch.from_numpy(image_siren_coords), 0)
@@ -945,10 +952,15 @@ if __name__ == "__main__":
                             lowest_val = val_at_point
                         smoothed_min_along_y[i] = prev_x
                     continue
+                
+                lower = np.clip(prev_x-1,0,ego_pixel_shape[1]-1)
+                upper = np.clip(prev_x+1,0,ego_pixel_shape[1]-1)
 
-                left_val = outImagea[y,prev_x-1]
+                next_x = np.array([lower,prev_x,upper])
+
+                left_val = outImagea[y,lower]
                 center_val = outImagea[y,prev_x]
-                right_val = outImagea[y,prev_x+1]
+                right_val = outImagea[y,upper]
 
                 vals = np.array([left_val, center_val, right_val])
 
@@ -962,8 +974,8 @@ if __name__ == "__main__":
 
                 below_thresh[i] = val < threshold #vals[lowest_val_pos] < threshold
 
-
-                prev_x += lowest_val_pos-1
+                prev_x = next_x[lowest_val_pos]
+                #prev_x += lowest_val_pos-1
                 smoothed_min_along_y[i] = prev_x
                 if val < lowest_val:
                     lowest_val = val
@@ -1067,7 +1079,7 @@ if __name__ == "__main__":
 
                 pixels = K_data @ R_rect @ coords_3D.T
                 pixels /= pixels[2]
-                #axes[0].plot(pixels[0], pixels[1], 'w--')
+                axes[0].plot(pixels[0], pixels[1], 'w--')
                 
                 #fx = interp1d(pixels[0], np.arange(len(pixels[0])))
                 #fy = interp1d(pixels[1], np.arange(len(pixels[1])))
@@ -1100,7 +1112,7 @@ if __name__ == "__main__":
                 axes[1].plot(min_along_y[below_thresh==True],y_coords[below_thresh==True],'r',linewidth=2)
                 axes[1].plot(trajnp[:,0], trajnp[:,1], 'm--')
                 axes[1].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-                #axes[1].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+                axes[1].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
                 print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
                 #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
         
@@ -1116,7 +1128,7 @@ if __name__ == "__main__":
             axes[0+load_offset].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
             axes[0+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             axes[0+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            #axes[0+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            axes[0+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
             axes[0+load_offset].plot(traj_t_pix,traj_r_pix,'r',linewidth=2)
             #axes[0+load_offset].imshow(outImagea,alpha=.5)
 
@@ -1139,7 +1151,7 @@ if __name__ == "__main__":
             tempval = axes[1+load_offset].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
             axes[1+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             axes[1+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            #axes[1+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            axes[1+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
             siren_min = np.unravel_index(np.argmin(outImagea),outImagea.shape)
             #axes[1+load_offset].plot(grad_desc_positions[:,0],grad_desc_positions[:,1],'r')
             #axes[1+load_offset].plot(siren_min[1],siren_min[0],'cx',markersize=4)
@@ -1161,7 +1173,7 @@ if __name__ == "__main__":
             print('avg gt:',np.mean(np.reshape(test_coord_value,(ego_pixel_shape))))
             axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             axes[2+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            #axes[2+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            axes[2+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
 
             #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
 

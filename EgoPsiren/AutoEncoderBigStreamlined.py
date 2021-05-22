@@ -161,7 +161,7 @@ if __name__ == "__main__":
     N_WORKERS = 0
     
     # TODO put these values in a settings file on disk to force uniformity across programs
-    img_height = 196 #256#128#64
+    img_height = 192 #256#128#64
 
     minR = -.5
     maxR = 4#5 #4.5

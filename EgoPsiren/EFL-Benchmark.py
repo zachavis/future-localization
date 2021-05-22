@@ -204,7 +204,7 @@ if __name__ == "__main__":
 
 
     #iFrame = 0
-    for iFrame in range(10,38):
+    for iFrame in range(45,69):
         tr = vTR['vTr'][iFrame]
         if (len(tr['XYZ'][1]) == 0):
             print('SKIPPING FRAME',iFrame,': Trajectory is empty.')
@@ -246,7 +246,14 @@ if __name__ == "__main__":
 
 
         r_y = -tr['up']/np.linalg.norm(tr['up'])
-        old_r_z = np.array([0,0,1]) #tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0]) #np.array([0,0,1])
+
+        v = tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+        if v @ np.array([0,0,1]) > .2:
+            old_r_z = v
+        else:
+            print("\tSkipping because of alignment severity")
+            continue
+        old_r_z = np.array([0,0,1])
         r_z = old_r_z - (old_r_z@r_y)*r_y
         r_z /= np.linalg.norm(r_z)
         r_x = np.cross(r_y, r_z)
@@ -387,7 +394,7 @@ if __name__ == "__main__":
        
 
         # DRAW 3D GRAPH
-        ax = plt.axes(projection='3d')
+        #ax = plt.axes(projection='3d')
         #ax.scatter(frames['C'].T[0],frames['C'].T[1],frames['C'].T[2], s=1)
         #keys = np.sort(np.array(list(frames.keys())))
 
@@ -569,7 +576,7 @@ if __name__ == "__main__":
 
 
 
-        img_height = 196
+        img_height = 192
 
         minR = -.5
         maxR = 4#4.5
@@ -822,7 +829,7 @@ if __name__ == "__main__":
             axes[0].set_ylim(img.shape[0],0)
             axes[0].set_aspect(1)
             axes[0].imshow(img)
-            axes[0].plot(tr_ground[0], tr_ground[1], 'rx')
+            axes[0].plot(tr_ground[0], tr_ground[1], 'b.')
 
             
             bigtpix = big_ego_t2pix(t)
@@ -841,7 +848,7 @@ if __name__ == "__main__":
             pixels = K_data @ R_rect @ coords_3D.T
             pixels /= pixels[2]
 
-            axes[0].plot(pixels[0],pixels[1],'b.')
+            axes[0].plot(pixels[0],pixels[1],'rx')
         
             #axes[1].set_title('Traj in EgoMap')
             #axes[1].set_xlim((-2*np.pi/3, 2*np.pi/3))
