@@ -161,7 +161,7 @@ if __name__ == "__main__":
     N_WORKERS = 0
     
     # TODO put these values in a settings file on disk to force uniformity across programs
-    img_height = 256#128#64
+    img_height = 196 #256#128#64
 
     minR = -.5
     maxR = 4#5 #4.5
@@ -460,7 +460,13 @@ if __name__ == "__main__":
                 #world_forward = 
 
                 r_y = -tr['up']/np.linalg.norm(tr['up'])
-                old_r_z = np.array([0,0,1])
+
+                v = tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+                if v @ np.array([0,0,1]) > .2:
+                    old_r_z = v
+                else:
+                    print("\tSkipping because of alignment severity")
+                    continue
                 r_z = old_r_z - (old_r_z@r_y)*r_y
                 r_z /= np.linalg.norm(r_z)
                 r_x = np.cross(r_y, r_z)
@@ -706,12 +712,6 @@ if __name__ == "__main__":
                 #newtraj[0] = []
         
 
-
-                # START POPULATING DICTIONARIES            
-                if (LOAD_NETWORK_FROM_DISK):
-                    TRAJ_IN_IMAGE_DICTIONARY[dictionary_index] = tr_ground
-                    RAW_IMAGE_DICTIONARY[dictionary_index] = img
-
                 # Check if first two pixels are within egomap
                 pix1 = future_trajectory[0]
                 pix2 = future_trajectory[1]
@@ -724,7 +724,12 @@ if __name__ == "__main__":
                     print('\tTrajectory is deficient (start is outside egomap)')
                     continue
 
-            
+                # START POPULATING DICTIONARIES            
+                if (LOAD_NETWORK_FROM_DISK):
+                    TRAJ_IN_IMAGE_DICTIONARY[dictionary_index] = tr_ground
+                    RAW_IMAGE_DICTIONARY[dictionary_index] = img
+
+                            
                 RESIZED_IMAGE_DICTIONARY[dictionary_index] = img_channel_swap
                 PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []

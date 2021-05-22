@@ -45,8 +45,10 @@ if __name__ == "__main__":
     #overfit_ego_map_with_mask_newnewloss
     #overfit_skinny_exp_all_imgs
     #overfit_ego_map_all_imgs
-    network = torch.load('overfit_ego_map_with_mask_newnewloss.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
-    vae_network = torch.load('autoencoder.pt')
+    #overfit_ego_map_with_mask_newnewloss.pt
+    
+    network = torch.load('overfit_ego_map_with_mask_newnewloss_square256_55kernel.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
+    vae_network = torch.load('overfit_autoencoder_minitest.pt')
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
         network = network.module
@@ -62,9 +64,9 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path = 'S:\\fut_loc\\train\\' #20150401_walk_00\\'
+    partial_folder_path = 'S:\\fut_loc\\test\\' #20150401_walk_00\\'
     
-    folder_name =  '20150401_walk_00' #'20150419_ikea' # '20150402_grocery' #'20150418_mall_00' #
+    folder_name =   '20150402_grocery' #'20150418_mall_00' #'20150401_walk_00' #'20150419_ikea' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -251,7 +253,7 @@ if __name__ == "__main__":
 
 
             
-            img_height = 196 #128
+            img_height = 256 #196 #128
 
             minR = -.5
             maxR = 4 #5#4.5
@@ -265,7 +267,13 @@ if __name__ == "__main__":
             #world_forward = 
 
             r_y = -tr['up']/np.linalg.norm(tr['up'])
-            old_r_z = np.array([0,0,1])
+
+            v = tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+            if v @ np.array([0,0,1]) > .2:
+                old_r_z = v
+            else:
+                print("\tSkipping because of alignment severity")
+                continue
             r_z = old_r_z - (old_r_z@r_y)*r_y
             r_z /= np.linalg.norm(r_z)
             r_x = np.cross(r_y, r_z)
@@ -348,7 +356,7 @@ if __name__ == "__main__":
 
 
 
-            aspect_ratio = 3/4#(maxT-minT)/(maxR-minR)
+            aspect_ratio = 1#3/4#(maxT-minT)/(maxR-minR)
             ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
             ego_pixel_shape_AlexNet = (256,256)
 
@@ -724,18 +732,18 @@ if __name__ == "__main__":
             test_image_prediction = torch.from_numpy( np.expand_dims(test_image,0) )
             print(test_image_prediction.device)
 
-            network.cpu()
-            vae_network.cpu()
+            #network.cpu()
+            #vae_network.cpu()
             
             
-            predictions_vae = vae_network({'img_sparse':torch.unsqueeze(torch.from_numpy(test_image_AlexNet),0)})
-            traj_vae = RecenterTrajDataBackward_AlexNet(np.squeeze(predictions_vae['model_out'].detach().numpy()))
-            traj_vae_t = ego_pix2t_AlexNet(traj_vae[0])
-            traj_vae_logr = ego_pix2r_AlexNet(traj_vae[1])
+            predictions_vae = vae_network({'img_sparse':torch.unsqueeze(torch.from_numpy(test_image_AlexNet),0).cuda()})
+            traj_vae = RecenterTrajDataBackward_AlexNet(np.squeeze(predictions_vae['model_out'].detach().cpu().numpy()))
+            traj_vae_t = ego_pix2t_AlexNet(traj_vae[0]) #traj_vae[0]#
+            traj_vae_logr = ego_pix2r_AlexNet(traj_vae[1]) #traj_vae[1]#
 
             if not USE_INTENSITY:
                 image_siren_coords_tensor = torch.unsqueeze( torch.from_numpy(image_siren_coords), 0)
-                image_siren_predictions = network({'coords':image_siren_coords_tensor,'img_sparse':test_image_prediction})
+                image_siren_predictions = network({'coords':image_siren_coords_tensor.cuda(),'img_sparse':test_image_prediction.cuda()})
                 image_siren_image = (image_siren_predictions['model_out'], image_siren_predictions['model_in'])
                 image_siren_image = image_siren_image[0].cpu().view(raw_image.shape[:2]).detach().numpy()
                 image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
@@ -758,7 +766,7 @@ if __name__ == "__main__":
 
 
             print(all_coords.shape)
-            predictions = network({'coords':all_coords,'img_sparse':test_image_prediction})
+            predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
             if type(predictions) is dict:
                 outImage = (predictions['model_out'], predictions['model_in'])
             else:
@@ -811,7 +819,7 @@ if __name__ == "__main__":
                 axes[1].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
         
             # Rerun again for gradient
-            predictions = network({'coords':all_coords,'img_sparse':test_image_prediction})
+            predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
             if type(predictions) is dict:
                 outImage = (predictions['model_out'], predictions['model_in'])
             else:
@@ -819,7 +827,7 @@ if __name__ == "__main__":
             outImageA = -DNN.gradient(*outImage)#-DNN.gradient(*predModel(outImage[1]))
         
             if not USE_INTENSITY:
-                predictions = network({'coords':dense_coords,'img_sparse':test_image_prediction})
+                predictions = network({'coords':dense_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
                 if type(predictions) is dict:
                     outImage = (predictions['model_out'], predictions['model_in'])
                 else:
@@ -882,17 +890,17 @@ if __name__ == "__main__":
 
 
             # Let's plan a path through the image via gradient descent
-            hypo_params = network.get_hypo_net_weights({'img_sparse':test_image_prediction})
+            hypo_params = network.get_hypo_net_weights({'img_sparse':test_image_prediction.cuda()})
             start = RecenterTrajDataForward(np.array([[[90,40]]]))
-            position = torch.from_numpy(start.astype(np.float32))
+            position = torch.from_numpy(start.astype(np.float32)).cuda()
             n_steps = 500
             grad_desc_positions = np.zeros((n_steps,2))
-            grad_desc_positions[0] = position[0,0]
+            grad_desc_positions[0] = position[0,0].cpu()
             for i in range(n_steps-1):
                 siren_output = network.hypo_net({'coords':position}, params=hypo_params[0])
                 siren_grad = -DNN.gradient(siren_output['model_out'],siren_output['model_in'])
                 position +=  .0005 * siren_grad #
-                grad_desc_positions[i+1] = position[0,0].detach().numpy()
+                grad_desc_positions[i+1] = position[0,0].detach().cpu().numpy()
 
             grad_desc_positions = RecenterTrajDataBackward(grad_desc_positions)
 
@@ -1059,7 +1067,7 @@ if __name__ == "__main__":
 
                 pixels = K_data @ R_rect @ coords_3D.T
                 pixels /= pixels[2]
-                axes[0].plot(pixels[0], pixels[1], 'w--')
+                #axes[0].plot(pixels[0], pixels[1], 'w--')
                 
                 #fx = interp1d(pixels[0], np.arange(len(pixels[0])))
                 #fy = interp1d(pixels[1], np.arange(len(pixels[1])))
@@ -1092,7 +1100,7 @@ if __name__ == "__main__":
                 axes[1].plot(min_along_y[below_thresh==True],y_coords[below_thresh==True],'r',linewidth=2)
                 axes[1].plot(trajnp[:,0], trajnp[:,1], 'm--')
                 axes[1].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-                axes[1].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+                #axes[1].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
                 print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
                 #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
         
@@ -1108,7 +1116,7 @@ if __name__ == "__main__":
             axes[0+load_offset].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
             axes[0+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             axes[0+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            axes[0+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            #axes[0+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
             axes[0+load_offset].plot(traj_t_pix,traj_r_pix,'r',linewidth=2)
             #axes[0+load_offset].imshow(outImagea,alpha=.5)
 
@@ -1131,7 +1139,7 @@ if __name__ == "__main__":
             tempval = axes[1+load_offset].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
             axes[1+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             axes[1+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            axes[1+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            #axes[1+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
             siren_min = np.unravel_index(np.argmin(outImagea),outImagea.shape)
             #axes[1+load_offset].plot(grad_desc_positions[:,0],grad_desc_positions[:,1],'r')
             #axes[1+load_offset].plot(siren_min[1],siren_min[0],'cx',markersize=4)
@@ -1153,7 +1161,7 @@ if __name__ == "__main__":
             print('avg gt:',np.mean(np.reshape(test_coord_value,(ego_pixel_shape))))
             axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             axes[2+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            axes[2+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            #axes[2+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
 
             #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
 

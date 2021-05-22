@@ -684,7 +684,7 @@ class HyperTrajectoryDataset2(torch.utils.data.Dataset):
 
 class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
   'Characterizes a dataset for PyTorch'
-  def __init__(self, trajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
+  def __init__(self, trajectories, pixeltrajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
     'Initialization'
     
     self.trajectories = trajectories
@@ -705,6 +705,8 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
     self.datalength = len(images)
     self.width = .5
     self.random = random
+
+    self.pixeltrajectories = pixeltrajectories
 
 
 
@@ -731,8 +733,11 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
     #output = (np.expand_dims(Coords2ValueFast(input,self.trajectories,1),0) / 30).astype(np.float32)Coords2ValueFastWS
     output = ( np.expand_dims(Coords2ValueFastWS(xformed_input,{0:self.trajectories[key]},None,None,self.width),-1) / self.datascale).astype(np.float32)
     #input = np.expand_dims(input,0)
+
+    traj = self.pixeltrajectories[key]
+    goal_pos = self.recenteringFn( np.array([traj[0][-1],traj[1][-1]]).astype(np.float32) )
     
-    return {'img_sparse':self.images[key], 'coords':self.recenteringFn(input)}, output#self.recenteringFn(input), output #
+    return {'img_sparse':self.images[key], 'coords':self.recenteringFn(input)}, {'field':output,'goal':goal_pos} #self.recenteringFn(input), output #
 
 
   def __getitem__(self, index):
@@ -798,7 +803,6 @@ class MassiveAutoEncoderTrajectoryDataset(torch.utils.data.Dataset):
     traj = self.trajectories[key]
     tx, ty = InterpAlongLine(traj[0],traj[1],self.trajLength)
     output = self.recenteringFn(np.vstack((tx,ty)))
-
     
     #output = ( np.expand_dims(Coords2ValueFastWS(xformed_input,{0:self.trajectories[key]},None,None,self.width),-1) / self.datascale).astype(np.float32)
     #'coords':self.recenteringFn(input)
