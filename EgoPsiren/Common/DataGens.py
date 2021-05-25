@@ -800,10 +800,12 @@ class MassiveAutoEncoderTrajectoryDataset(torch.utils.data.Dataset):
     #xformed_input = np.array(self.polarfn(xformed_input[:,0],xformed_input[:,1])).T
 
     
-    traj = self.trajectories[key]
+    traj = np.array(self.trajectories[key]).T
     tx, ty = InterpAlongLine(traj[0],traj[1],self.trajLength)
-    output = self.recenteringFn(np.vstack((tx,ty)))
+    #output = self.recenteringFn(np.vstack((tx,ty)))
+    output = self.recenteringFn(np.hstack((tx,ty)))
     
+
     #output = ( np.expand_dims(Coords2ValueFastWS(xformed_input,{0:self.trajectories[key]},None,None,self.width),-1) / self.datascale).astype(np.float32)
     #'coords':self.recenteringFn(input)
     

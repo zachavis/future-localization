@@ -991,9 +991,10 @@ class ConvolutionalAutoEncoderToPath(nn.Module):
         logVar = embedding[:,self.latent_dim//2:]
 
         z = self.reparameterize(mu,logVar)
+        #z = mu
 
         model_output = self.decoder(z)
-        model_output = torch.reshape(model_output,(model_output.shape[0],2,-1))
+        #model_output = torch.reshape(model_output,(model_output.shape[0],2,-1))
 
 
         return {'model_in': model_input, 'model_out':model_output, 'latent_vec': embedding,
@@ -1323,10 +1324,16 @@ laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds['model_ou
 
 def auto_encoder_loss(model_outputs_dict, model_input, gt_value, epoch ):
     
+    
+    #print("Prediction: \n", model_outputs_dict['model_out'])
+    #print("Truth: \n", gt_value)
+    #print("")
+
     mu = model_outputs_dict['mu']
     logVar = model_outputs_dict['logVar']
     
     kl_divergence = 0.5 * torch.sum(-1 - logVar + mu.pow(2) + logVar.exp())
+    # kl_divergence = 0.0
 
     path_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'],gt_value)
     loss = kl_divergence + path_loss
@@ -1336,7 +1343,7 @@ def auto_encoder_loss(model_outputs_dict, model_input, gt_value, epoch ):
     #print('\tgt min:' , torch.min(gt_value).item())
     #print('\tpred max:' , torch.max(model_outputs_dict['model_out']).item())
     #print('\tpred min:' , torch.min(model_outputs_dict['model_out']).item())
-    print('')
+    #print('')
     
     return loss
 
@@ -1357,7 +1364,7 @@ def value_mse(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192,192)):
     prediction = torch.reshape(model_outputs_dict['model_out'],(batch_size,1,dim[0],dim[1]))
     #resultA = model_outputs_dict['model_out'].get_device()
     #resultB = prediction.get_device()
-    pred_goals = RemapRange(SoftArgmax2D(window_fn="Parzen")(-prediction),0,196,-1,1)
+    pred_goals = RemapRange(SoftArgmax2D(window_fn="Parzen")(-prediction),0,upper_end,-1,1)
     goals = torch.unsqueeze(gt_value_dict['goal'],1)
 
 

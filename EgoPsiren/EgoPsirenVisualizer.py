@@ -48,8 +48,10 @@ if __name__ == "__main__":
     #overfit_ego_map_with_mask_newnewloss.pt #196, 3/4
     #overfit_ego_map_with_mask_newnewloss_square256_55kernel.pt #256, 1
     #'overfit_test_network_exp_with_goal.pt'
-    network = torch.load('overfit_ego_map_with_mask_newnewloss_square192_55kernel_aligned.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
-    vae_network = torch.load('overfit_AutoEncoder192_aligned.pt')
+    #overfit_ego_map_with_mask_newnewloss_square192_55kernel_aligned BAD
+    #overfit_imploc_aligned_nogoal_192.pt #192
+    network = torch.load('overfit_imploc_aligned_nogoal_192.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
+    vae_network = torch.load('overfit_test_network_exp_AE_GOOD.pt') #''overfit_test_network_exp_AE.pt
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
         network = network.module
@@ -65,9 +67,9 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path = 'S:\\fut_loc\\train\\' #20150401_walk_00\\'
+    partial_folder_path = 'S:\\fut_loc\\train\\' #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\'
     
-    folder_name =   '20150401_walk_00' #'20150419_ikea' #'20150402_grocery' #'20150418_mall_00' #
+    folder_name =  '10000000_test_00' #'marketplace6203_trand_p0' #'20150402_grocery' #'20150418_mall_00' #'20150401_walk_00' #'20150419_ikea' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -196,15 +198,15 @@ if __name__ == "__main__":
         print('loading trajectory file')
         traj_data_file = folder_path + 'traj_prediction.txt'
         vTR = DataReader.ReadTraj(traj_data_file)
-        vTR = DataReader.ReadTraj(traj_data_file)
+        #vTR = DataReader.ReadTraj(traj_data_file)
 
         
 
-        frameOffset = 6
+        frameOffset = 0
         frameEnd = len(os.listdir(folder_path + 'im\\')) #55
         imageScale = .1
 
-        for iFrame in range(frameOffset,frameEnd):
+        for iFrame in range(0,frameEnd):
 
             dictionary_index = iFrame + count * FILE_UPPER_LIMIT
 
@@ -538,7 +540,7 @@ if __name__ == "__main__":
                 print('\tTrajectory is deficient (overlapping points)')
                 continue
                 
-                
+           
                 
             #np.random.seed(8980)
 
@@ -660,6 +662,20 @@ if __name__ == "__main__":
 
 
 
+             # Check if first two pixels are within egomap
+            pix1 = future_trajectory[0]
+            pix2 = future_trajectory[1]
+
+            if (pix1[0] < 0 or pix1[0] > ego_pixel_shape[1] 
+                or pix1[1] < 0 or pix1[1] > ego_pixel_shape[0]
+                or pix2[0] < 0 or pix2[0] > ego_pixel_shape[1] 
+                or pix2[1] < 0 or pix2[1] > ego_pixel_shape[0]):
+
+                print('\tTrajectory is deficient (start is outside egomap)')
+                continue
+
+                    
+
 
             #PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
             test_pix_trajectory = []
@@ -667,6 +683,8 @@ if __name__ == "__main__":
             #LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []
             test_ws_trajectory = []
             for pix in future_trajectory:
+                if (pix[0] < 0 or pix[0] > ego_pixel_shape[1] or pix[1] < 0 or pix[1] > ego_pixel_shape[0]): # outside ego map
+                        break
                 test_pix_trajectory.append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
                 #PIXEL_TRAJECTORY_DICTIONARY[dictionary_index].append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
                 newpoint = ( DataReader.Polar2Coord( ego_pix2t(pix[0]),np.exp(ego_pix2r(pix[1])) ) )
@@ -745,8 +763,12 @@ if __name__ == "__main__":
             
             predictions_vae = vae_network({'img_sparse':torch.unsqueeze(torch.from_numpy(test_image_VAE),0).cuda()})
             traj_vae = RecenterTrajDataBackward_VAE(np.squeeze(predictions_vae['model_out'].detach().cpu().numpy()))
-            traj_vae_t = ego_pix2t_VAE(traj_vae[0]) #traj_vae[0]#
-            traj_vae_logr = ego_pix2r_VAE(traj_vae[1]) #traj_vae[1]#
+            if len(traj_vae) > 2:
+                traj_vae_t = ego_pix2t_VAE(traj_vae[:25]) #traj_vae[0]#
+                traj_vae_logr = ego_pix2r_VAE(traj_vae[25:]) #traj_vae[1]#
+            else:
+                traj_vae_t = ego_pix2t_VAE(traj_vae[0]) #traj_vae[0]#
+                traj_vae_logr = ego_pix2r_VAE(traj_vae[1]) #traj_vae[1]#
 
             if not USE_INTENSITY:
                 image_siren_coords_tensor = torch.unsqueeze( torch.from_numpy(image_siren_coords), 0)
@@ -896,7 +918,11 @@ if __name__ == "__main__":
 
 
 
+
+
+            ########################################################################
             # Let's plan a path through the image via gradient descent
+            ########################################################################
             hypo_params = network.get_hypo_net_weights({'img_sparse':test_image_prediction.cuda()})
             start = RecenterTrajDataForward(np.array([[[90,40]]]))
             position = torch.from_numpy(start.astype(np.float32)).cuda()
@@ -947,7 +973,11 @@ if __name__ == "__main__":
                     #below_thresh[i] = val_at_point > lowest_val - tuning_parameter * lowest_val#< threshold
                     if True: #below_thresh[i]:
                         have_prev_point = True
+                        x = outImagea.shape[1]//2+1 # make center assumption
                         prev_x = x
+
+                        val_at_point = outImagea[y,x]
+
                         if val_at_point < lowest_val:
                             lowest_val = val_at_point
                         smoothed_min_along_y[i] = prev_x
@@ -1064,7 +1094,10 @@ if __name__ == "__main__":
 
                 pixels = K_data @ R_rect @ coords_3D.T
                 pixels /= pixels[2]
-                axes[0].plot(pixels[0], pixels[1], 'c--')
+                #axes[0].plot(pixels[0], pixels[1], 'c--')
+                
+                xn,yn = DataGens.InterpAlongLine(pixels[0],pixels[1],25)
+                axes[0].plot(xn,yn,'cx')
 
 
                 
@@ -1089,8 +1122,6 @@ if __name__ == "__main__":
                 #new_ys = fy(iy)
                 #axes[0].plot(new_xs,new_ys, 'wx')
 
-                #xn,yn = DataGens.InterpAlongLine(pixels[0],pixels[1],10)
-                #axes[0].plot(xn,yn,'wo')
 
 
                 
@@ -1130,6 +1161,30 @@ if __name__ == "__main__":
             axes[0+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
             axes[0+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
             axes[0+load_offset].plot(traj_t_pix,traj_r_pix,'r',linewidth=2)
+            xn,yn = DataGens.InterpAlongLine(tpix_AlexNet,rpix_AlexNet,25)
+            axes[0+load_offset].plot(xn,yn,'cx')
+
+
+            traj = np.array(test_pix_trajectory).T
+            tx, ty = DataGens.InterpAlongLine(traj[0],traj[1],25)
+            px = RecenterTrajDataForward( tx )
+            py = RecenterTrajDataForward( ty )
+            print('print x ', px)
+            print('print y ', py)
+
+            traj = np.array([[ 0.0000, -0.0369, -0.0739, -0.1108, -0.1478, -0.1847, -0.2217, -0.2586,-0.2956, 
+                       -0.3325, -0.3695, -0.4064, -0.4434, -0.4803, -0.5173, -0.5542,
+                       -0.5912, -0.6281, -0.6650, -0.7020, -0.7389, -0.7759, -0.8128, -0.8498,
+                       -0.8867, -0.0712, -0.0932, -0.1152, -0.1372, -0.1592, -0.1812, -0.2032,
+                       -0.2252, -0.2473, -0.2693, -0.2913, -0.3133, -0.3353, -0.3573, -0.3793,
+                       -0.4013, -0.4233, -0.4453, -0.4673, -0.4893, -0.5113, -0.5333, -0.5553,-0.5774, -0.5994]])
+
+            tx = RecenterTrajDataBackward_VAE( traj[0,:25] )
+            ty = RecenterTrajDataBackward_VAE( traj[0,25:] )
+            axes[0+load_offset].plot(tx,ty,'rx')
+
+
+
             #axes[0+load_offset].imshow(outImagea,alpha=.5)
 
 

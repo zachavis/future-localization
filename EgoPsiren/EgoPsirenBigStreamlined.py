@@ -289,8 +289,8 @@ if __name__ == "__main__":
             COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TR
             PIXEL_TRAJECTORY_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TR
 
-            RAW_IMAGE_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TR
-            TRAJ_IN_IMAGE_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TR
+            RAW_IMAGE_DICTIONARY = RAW_IMAGE_DICTIONARY_TR
+            TRAJ_IN_IMAGE_DICTIONARY = TRAJ_IN_IMAGE_DICTIONARY_TR
             
         
         if data_subset == 'test':
@@ -299,8 +299,8 @@ if __name__ == "__main__":
             COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TE
             PIXEL_TRAJECTORY_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TE
 
-            RAW_IMAGE_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TE
-            TRAJ_IN_IMAGE_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TE
+            RAW_IMAGE_DICTIONARY = RAW_IMAGE_DICTIONARY_TE
+            TRAJ_IN_IMAGE_DICTIONARY = TRAJ_IN_IMAGE_DICTIONARY_TE
 
 
         partial_folder_path = data_root / data_subset
@@ -729,9 +729,10 @@ if __name__ == "__main__":
                 PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 COORD_TRAJECTORY_DICTIONARY[dictionary_index] = []
+
                 for pix in future_trajectory:
                     if (pix[0] < 0 or pix[0] > ego_pixel_shape[1] or pix[1] < 0 or pix[1] > ego_pixel_shape[0]): # outside ego map
-                        continue
+                        break
                     PIXEL_TRAJECTORY_DICTIONARY[dictionary_index].append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
                     logpolar_coord = (ego_pix2t(pix[0]),ego_pix2r(pix[1]))
                     newpoint = ( Polar2Coord( logpolar_coord[0],np.exp(logpolar_coord[1]) ) )
