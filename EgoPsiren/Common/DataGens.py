@@ -1023,6 +1023,168 @@ def Coords2ValueFastWS(all_pixel_coords, trajectory_dictionary, coordXform_FORWA
 
 
 
+
+
+
+
+
+
+# Sample points in world space (likely pixel centers), trajectory in world space, unused, unused, stddev from gaussian
+def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXform_FORWARD, coordXform_BACKWARD, stddev = 1):
+    coord_value = np.zeros((all_pixel_coords.shape[0])) # where value function will be stored.
+    closest_distance = np.inf # might be unused...
+    time_along_trajectory = 0 # don't know
+    for key in trajectory_dictionary.keys():
+        traj = np.array(trajectory_dictionary[key],dtype=np.float32) # trajectory in world space
+        traj_len = len(traj)
+        dists = traj - all_pixel_coords[:,None] # distance from every point on the trajectory to all pixel coordinates
+        dists = np.linalg.norm(dists,axis=2) # magnitude of distances to every point on trajectory
+                
+        traj_dists = traj - traj[:,None]
+        traj_dists = np.linalg.norm(traj_dists,axis=2) # magnitude of distances to every point on trajectory
+        density  = np.exp( - .5 * traj_dists**2 / stddev )
+        density  = np.sum(density, axis=1)
+        
+        #next_pts = np.zeros((traj.shape[0], 2))
+        prev_pts = np.zeros((traj.shape[0], 2))
+        prev_pts[1:] = traj[:-1]
+        prev_pts[0] = traj[0]
+        vecLines = traj-prev_pts
+        vecLinesMag = np.linalg.norm(vecLines,axis=1)
+        distAlongTraj = np.cumsum(vecLinesMag)
+
+        #end = distAlongTraj[-1] # trajectory length (path integral)
+        #distAlongTraj /= distAlongTraj[-1] # trajectory distance is always 1 at the goal. TODO is this okay?
+        #end = distAlongTraj[-1] # unit path integral
+
+        #dists /= distAlongTraj[-1]
+
+        # now let's get the weighted sum of gaussians multiplied by the path integral
+
+        #testing = np.zeros(traj.shape[0])
+        #testing[0] = 1
+
+        total_dist = distAlongTraj[-1]
+
+        if (len(density) > 1):
+            density[0] = density[1]
+            density[-1] = density[-2]
+
+        gaussians = -np.exp( - .5 * dists**2 / stddev )  #stats.norm.pdf(dists,scale=stddev)
+        product = gaussians * distAlongTraj[None] / density[None]
+        weighted_sum = np.sum(product,axis=1)
+        #max_weighted_sum = np.min(weighted_sum)
+        final = weighted_sum
+        coord_value = final
+
+
+
+
+
+        ## Let's generate vectors tangent to trajectory.
+        ## First, let's get next and previous points
+        #next_pts = np.ones((traj.shape[0]-1, 3))
+        #prev_pts = np.ones((traj.shape[0]-1, 3))
+        #next_pts[:,:2] = traj[1:]
+        #prev_pts[:,:2] = traj[:-1]
+
+        ## Now let's subtract a next point from a previous point
+        #vecLines = next_pts[:,:2]-prev_pts[:,:2]
+        #vecLinesMag = np.linalg.norm(vecLines,axis=1)
+        #distAlongTraj = np.cumsum(vecLinesMag)
+        #vecLines = np.divide(vecLines, vecLinesMag[:,None]) # The none thing is to make the shapes broadcastable
+        #vecPoints = -traj[:-1]+all_pixel_coords[:,None]
+        #vecPoints = np.divide(vecPoints, vecLinesMag[:,None]) # The none thing is to make the shapes broadcastable
+
+        #dotResults = np.multiply(vecLines[None,:], vecPoints).sum(2)
+        #firstrow = dotResults[0]
+        ##if dotResults.max() > 0:
+        ##    print('stop')
+                
+        #trajLines = np.cross(next_pts,prev_pts)
+
+        #someones = np.ones((all_pixel_coords.shape[0],1))
+        #catted = np.concatenate((all_pixel_coords, someones), axis=1)
+        #projOntoLine = catted @ trajLines.T #np.dot(trajLines, catted[:,None] )
+        #lineMagnitudes = np.linalg.norm(trajLines[:,:2],axis=1)
+        #distsLine = np.abs( projOntoLine / lineMagnitudes[None,:] )
+
+        ##a_test = dotResults < 0
+        #distsLine[ dotResults < 0 ] = np.inf #can turn this into a max/min problem for divergence free processing
+        #distsLine[ dotResults > 1 ] = np.inf
+
+        #linesArgMin = np.argmin(distsLine,axis=1).astype(np.int32)
+        #pointsArgMin = np.argmin(dists,axis=1).astype(np.int32)
+
+            
+        #smallest_distsLine = np.squeeze( np.take_along_axis(distsLine,linesArgMin[:,None],axis=1) )
+        #smallest_dists = np.squeeze( np.take_along_axis(dists,pointsArgMin[:,None],axis=1) )
+
+        #dist_along_min_line_segment = np.squeeze( np.take_along_axis(dotResults,linesArgMin[:,None],axis=1) )
+
+        #stacked = np.stack((smallest_distsLine, smallest_dists), axis=1)
+
+        #which_was_closest = np.argmin(stacked,axis=1).astype(np.int32) # which was closest between point and line
+
+            
+        #closest_lines = which_was_closest == 0
+        #closest_points = which_was_closest == 1
+            
+        #current_distance = np.zeros(smallest_dists.shape[0])
+        #current_time = np.zeros(smallest_dists.shape[0])
+
+
+        #current_distance[closest_lines] = smallest_distsLine[closest_lines] #distsLine[linesArgMin]
+        #above_zero = linesArgMin > 0
+        #together = np.logical_and(closest_lines, above_zero)
+        ##testing = distAlongTraj[linesArgMin]
+        #current_time[together] = distAlongTraj[linesArgMin-1][together]
+        ##vlm = vecLinesMag[linesArgMin][together]
+        ##dr = dist_along_min_line_segment[linesArgMin][together]
+            
+        #dist_along_min_line_segment = np.squeeze( np.take_along_axis(dotResults,linesArgMin[:,None],axis=1) )
+        ##resultA = vecLinesMag[closest_lines]#[closest_lines]
+        ##resultB = dist_along_min_line_segment[closest_lines]#[closest_lines]
+        ##finalResult = resultA * resultB
+        ##finalResultClosest = finalResultClosest[closest_lines]
+        #current_time[closest_lines] += vecLinesMag[linesArgMin][closest_lines] * dist_along_min_line_segment[closest_lines]
+
+        ##closest_distance_arg = np.argmin([distsLine[linesArgMin],dists[pointsArgMin]])
+            
+        #current_distance[closest_points] = smallest_dists[closest_points]
+        #above_zero = pointsArgMin > 0
+        #together = np.logical_and(closest_points, above_zero)
+        #current_time[together] = distAlongTraj[pointsArgMin-1][together]
+
+
+
+
+                
+        #closest_distances = current_distance
+        #time_along_trajectory = current_time
+                
+    #time_along_trajectory = np.log(time_along_trajectory+1)
+    #values = -stats.norm.pdf(closest_distances,scale=stddev) * time_along_trajectory#time_along_trajectory
+    #coord_value = values
+
+    return coord_value
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class GTFieldDataset(torch.utils.data.Dataset):
   'Characterizes a dataset for PyTorch'
   def __init__(self, trajectories, numItems, recenteringFn, img_points ): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
