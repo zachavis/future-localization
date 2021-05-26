@@ -924,17 +924,23 @@ class ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(nn.Module):
 
         intensity =  intensity*.9 + .1 # clamping
         
-
+        
         siren = -nn.Sigmoid()(-siren_output['model_out'])*.9+.1 # clamping
-
-
+        
+        # Get SIREN with coord subset
+        if 'derivative_siren' in model_input:
+            dsiren_output = self.hypo_net(model_input['derivative_siren'], params=hypo_params)
+            dsiren = -nn.Sigmoid()(-dsiren_output['model_out'])*.9+.1
+        else:
+            dsiren_output = {'model_in':None}
+            dsiren = None
 
 
         model_output = siren * intensity
 
 
-
-        return {'model_in': siren_output['model_in'], 'model_out':model_output, 'siren_out': siren_output['model_out'], 'latent_vec': embedding,
+        # instead of siren_output['model_out'], use sigmoided version
+        return {'model_in': siren_output['model_in'], 'model_out':model_output, 'siren_out': siren, 'dsiren_in':dsiren_output['model_in'], 'dsiren_out':dsiren, 'latent_vec': embedding,
                 'hypo_params': hypo_params, 'intensity': intensity}
 
     def get_hypo_net_weights(self, model_input):
@@ -1109,8 +1115,13 @@ def train(network,  data_generator, loss_function, optimizer, epoch):
     #print(i)
     if True:
         for key, val in input_data.items():
-            val = val.cuda()
-            input_data[key] = val
+            if type(val) is dict:
+                for key2, val2 in val.items():
+                    val2 = val2.cuda()
+                    val[key2] = val2
+            else:
+                val = val.cuda()
+                input_data[key] = val
         #where_wrong_way2 = np.where(target_output.numpy()[0,0,:,1] > 0.00001)
         #if len(where_wrong_way2[0]) > 0 :
         ##print(where_wrong_way2[0].shape)
@@ -1145,8 +1156,13 @@ def test_with_grad(network, test_loader, loss_function, epoch):
   for data, target in test_loader:
     if True:
         for key, val in data.items():
-            val = val.cuda()
-            data[key] = val
+            if type(val) is dict:
+                for key2, val2 in val.items():
+                    val2 = val2.cuda()
+                    val[key2] = val2
+            else:
+                val = val.cuda()
+                data[key] = val
             
         if (type(target) is dict):
             for key, val in target.items():
@@ -1421,3 +1437,106 @@ def old_value_mse(model_outputs_dict, coords, gt_value, epoch):
     return value_loss
 
 old_value_mse_with_coords = lambda preds,gt,epoch: old_value_mse(preds,preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+
+
+
+
+
+
+def value_mse_NEURIPS(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192,192)):
+    #model_outputs = torch.squeeze(model_outputs,-1)
+    #multiplier = torch.zeros(coords.shape)
+
+    upper_end = dim[0]
+
+    mask = model_outputs_dict['intensity']
+    
+    regularizer_batch = torch.mean(mask,dim=[1,2])
+    regularizer = torch.mean(regularizer_batch)/20.0
+
+    batch_size = model_outputs_dict['model_out'].shape[0]
+    #prediction = torch.reshape(model_outputs_dict['model_out'],(batch_size,1,dim[0],dim[1]))
+    sirenimg = torch.reshape(model_outputs_dict['siren_out'],(batch_size,1,dim[0],dim[1]))
+    #resultA = model_outputs_dict['model_out'].get_device()
+    #resultB = prediction.get_device()
+    pred_goals = RemapRange(SoftArgmax2D(window_fn="Parzen")(-sirenimg),0,upper_end,-1,1)
+    goals = torch.unsqueeze(gt_value_dict['goal'],1)
+
+
+    # multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+    goal_loss = torch.nn.MSELoss()(pred_goals,goals)
+    #implicit_field_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'], gt_value_dict['field'] )
+
+    implicit_gradient_loss = torch.nn.MSELoss()( gradient(model_outputs_dict['dsiren_out'], model_outputs_dict['dsiren_in'] ), gt_value_dict['gradient']) # on siren
+    
+    implicit_field_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'], gt_value_dict['field'] ) # on multiplication
+
+    loss = 0.1 * implicit_gradient_loss + implicit_field_loss + 0.1 * goal_loss + regularizer #+ implicit_field_loss + implicit_gradient_loss + regularizer
+
+
+    #print("\tintensity loss:", regularizer.item())
+    #print("\tgoal loss:", goal_loss.item())
+    #print("\timplicit field loss:", implicit_field_loss.item())
+    #print("")
+    return loss
+
+#def value_mse(model_outputs_dict, coords, gt_value, epoch):
+#    #model_outputs = torch.squeeze(model_outputs,-1)
+#    #multiplier = torch.zeros(coords.shape)
+
+#    raw_mask = model_outputs_dict['intensity']
+#    mask =  raw_mask*.9 + .1
+#    regularizer_batch = torch.mean(raw_mask,dim=[1,2])
+#    regularizer = torch.mean(regularizer_batch)/20.0
+
+#    raw_siren = model_outputs_dict['siren_out']
+#    siren = torch.relu(-raw_siren)+.1
+#    #model_outputs = torch.relu(-model_outputs_dict['model_out']) + .1 # SIREN values should be between -inf and 0, although initially there could be positive values. This is essentially a ReLU
+#    multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+#    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+#    value_loss = torch.nn.L1Loss()(-1 * mask * siren * multiplier, gt_value * multiplier) + regularizer
+#    print("intensity loss:", regularizer)
+#    return value_loss
+
+#laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds[0],preds[1], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+value_mse_NEURIPS_with_coords = lambda preds,gt,epoch: value_mse_NEURIPS(preds,preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+
+
+
+#def value_mse_NEURIPS(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192,192)):
+#    #model_outputs = torch.squeeze(model_outputs,-1)
+#    #multiplier = torch.zeros(coords.shape)
+
+#    upper_end = dim[0]
+
+#    mask = model_outputs_dict['intensity']
+    
+#    regularizer_batch = torch.mean(mask,dim=[1,2])
+#    regularizer = torch.mean(regularizer_batch)/20.0
+
+#    batch_size = model_outputs_dict['model_out'].shape[0]
+#    #prediction = torch.reshape(model_outputs_dict['model_out'],(batch_size,1,dim[0],dim[1]))
+#    sirenimg = torch.reshape(model_outputs_dict['siren_out'],(batch_size,1,dim[0],dim[1]))
+#    #resultA = model_outputs_dict['model_out'].get_device()
+#    #resultB = prediction.get_device()
+#    pred_goals = RemapRange(SoftArgmax2D(window_fn="Parzen")(-sirenimg),0,upper_end,-1,1)
+#    goals = torch.unsqueeze(gt_value_dict['goal'],1)
+
+
+#    # multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+#    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+#    goal_loss = torch.nn.MSELoss()(pred_goals,goals)
+#    #implicit_field_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'], gt_value_dict['field'] )
+
+#    implicit_gradient_loss = torch.nn.MSELoss()( gradient(model_outputs_dict['dsiren_out'], model_outputs_dict['dsiren_in'] ), gt_value_dict['gradient'])
+#    implicit_field_loss = torch.nn.L1Loss()(model_outputs_dict['siren_out'], gt_value_dict['field'] )
+
+#    value_loss = 0.1 * implicit_gradient_loss + implicit_field_loss + 0.1 * goal_loss #+ implicit_field_loss + implicit_gradient_loss + regularizer
+
+
+#    #print("\tintensity loss:", regularizer.item())
+#    #print("\tgoal loss:", goal_loss.item())
+#    #print("\timplicit field loss:", implicit_field_loss.item())
+#    #print("")
+#    return value_loss

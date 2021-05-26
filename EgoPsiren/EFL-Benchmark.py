@@ -14,6 +14,7 @@ import torch
 
 from Common import DNN
 from Common import DataGens
+from Common import DataReader
 #from DNN import *
 
 
@@ -21,6 +22,7 @@ from scipy import interpolate
 
 
 from mpl_toolkits.mplot3d import Axes3D
+
 
 def FileAsLines(fid):
     lines = []
@@ -130,7 +132,7 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    folder_path = 'S:\\fut_loc\\test\\20150402_grocery\\'#'S:\\fut_loc\\train\\20150401_walk_00\\'#'S:\\fut_loc\\test\\20150402_walk\\'#20150419_ikea
+    folder_path = 'S:\\fut_loc\\test\\20150402_grocery\\'#'S:\\synth_marketplace_random2020\\train\\acofre20167850_t38_p18\\' #acofre20167850_t36_p9\\'    #'S:\\fut_loc\\train\\20150401_walk_00\\' #'S:\\fut_loc\\test\\20150402_walk\\'#20150419_ikea #
 
     # load calibration
     print('loading calibration file')
@@ -203,27 +205,34 @@ if __name__ == "__main__":
     vTR = ReadTraj(traj_data_file)
 
 
-    #iFrame = 0
+    #iFrame = 45
     for iFrame in range(45,69):
+
+        print("GETTING", iFrame)
         tr = vTR['vTr'][iFrame]
+        frames = tr['frame']
+        print(frames)
         if (len(tr['XYZ'][1]) == 0):
             print('SKIPPING FRAME',iFrame,': Trajectory is empty.')
             continue
 
         #im = sprintf('%sim/%s', folder_path, vFilename{iFrame});
         im = "{}im\\{}".format(folder_path, vFilename[iFrame])
-        disp = "{}disparity\\{}{}".format(folder_path, vFilename[iFrame],'.disp.txt')
+        #disp = "{}disparity\\{}{}".format(folder_path, vFilename[iFrame],'.disp.txt')
 
         if not os.path.isfile(im):
             print('could not find file')
             continue
-        if not os.path.isfile(disp):
-            print('could not find file')
-            continue
+        #if not os.path.isfile(disp):
+        #    print('could not find file')
+        #    continue
 
         img = cv2.cvtColor(cv2.imread(im), cv2.COLOR_BGR2RGB).astype(np.float64)/255.0
 
-        disp_img = np.genfromtxt(disp, delimiter=',')[:,:-1] #np.loadtxt(disp, delimiter=',')
+        #disp_img = np.genfromtxt(disp, delimiter=',')[:,:-1] #np.loadtxt(disp, delimiter=',')
+        disp_img = np.zeros((1,1))
+        
+        
         #cv2.imshow('intermediate',intermediate)
         #cv2.waitKey()
 
@@ -279,117 +288,117 @@ if __name__ == "__main__":
         img_resized = cv2.resize(img, (int(img.shape[1]*.25), int(img.shape[0]*.25)))*2.0-1.0
         img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
 
+        if False:
+            # DISPLAY IMAGES
+            fig, axes = plt.subplots(1,4)#, figsize=(18,6))
+            # axes = [ax] # only use if there's 1 column
 
-        # DISPLAY IMAGES
-        fig, axes = plt.subplots(1,4)#, figsize=(18,6))
-        # axes = [ax] # only use if there's 1 column
-
-        #newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
-        #fig.set_size_inches(16, 24)
-        axes[0].set_title('Traj in image')
-        #axes[0].set_xlim(*newBoundsx)
-        #axes[0].set_ylim(*crowdBoundsY)
+            #newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
+            #fig.set_size_inches(16, 24)
+            axes[0].set_title('Traj in image')
+            #axes[0].set_xlim(*newBoundsx)
+            #axes[0].set_ylim(*crowdBoundsY)
         
-        axes[0].set_xlim(0,img.shape[1])
-        axes[0].set_ylim(img.shape[0],0)
-        axes[0].set_aspect(1)
-        axes[0].imshow(img)
-        axes[0].plot(tr_ground[0], tr_ground[1], 'r')
+            axes[0].set_xlim(0,img.shape[1])
+            axes[0].set_ylim(img.shape[0],0)
+            axes[0].set_aspect(1)
+            axes[0].imshow(img)
+            axes[0].plot(tr_ground[0], tr_ground[1], 'r')
 
 
-        axes[2].set_title('Rectified image')
-        #axes[0].set_xlim(*newBoundsx)
-        #axes[0].set_ylim(*crowdBoundsY)
-        #axes[0].set_aspect(1)
+            axes[2].set_title('Rectified image')
+            #axes[0].set_xlim(*newBoundsx)
+            #axes[0].set_ylim(*crowdBoundsY)
+            #axes[0].set_aspect(1)
 
-        #homography = K_data @ R_rect @ np.linalg.inv(K_data)
+            #homography = K_data @ R_rect @ np.linalg.inv(K_data)
         
-        
-
-        img_rectified = cv2.warpPerspective(img, homography, (img.shape[1], img.shape[0]))
-        axes[2].imshow(img_rectified)
-        #axes[1].plot(tr_ground[0], tr_ground[1], 'r')
-
-
-        #def intersectPlane(n, p0, l0, l): 
-        #    # assuming vectors are all normalized
-        #    denom = n @ l
-        #    if denom > 1e-6: # hit
-        #        p0l0 = p0 - l0
-        #        t = p0l0 @ n / denom
-        #        return t #(t >= 0)
-        #    return 0  # missed
-
-        def intersectPlaneV(n, p0, l0, L):
-            print('in')
-            plane_offset = p0-l0
-            denoms = n @ L
-            t = np.zeros(len(denoms))
-            intersecting = np.where(denoms > 1e-6)
-            d = - plane_offset @ n
-            result = np.divide( d[None], denoms[intersecting])
-            t[intersecting] = result
-            return t
         
 
-        depth_img = np.zeros(img_rectified.shape[:2])
+            img_rectified = cv2.warpPerspective(img, homography, (img.shape[1], img.shape[0]))
+            axes[2].imshow(img_rectified)
+            #axes[1].plot(tr_ground[0], tr_ground[1], 'r')
+
+
+            #def intersectPlane(n, p0, l0, l): 
+            #    # assuming vectors are all normalized
+            #    denom = n @ l
+            #    if denom > 1e-6: # hit
+            #        p0l0 = p0 - l0
+            #        t = p0l0 @ n / denom
+            #        return t #(t >= 0)
+            #    return 0  # missed
+
+            def intersectPlaneV(n, p0, l0, L):
+                print('in')
+                plane_offset = p0-l0
+                denoms = n @ L
+                t = np.zeros(len(denoms))
+                intersecting = np.where(denoms > 1e-6)
+                d = - plane_offset @ n
+                result = np.divide( d[None], denoms[intersecting])
+                t[intersecting] = result
+                return t
+        
+
+            depth_img = np.zeros(img_rectified.shape[:2])
 
         
-        depth_pixel_coords = np.array( [ [j+.5,i+.5,1.0] for i in range(img_rectified.shape[0]) for j in range(img_rectified.shape[1]) ], dtype=np.float32)
+            depth_pixel_coords = np.array( [ [j+.5,i+.5,1.0] for i in range(img_rectified.shape[0]) for j in range(img_rectified.shape[1]) ], dtype=np.float32)
 
-        #pixel = np.array([j,i,1])
-        p_normal = tr['up']/np.linalg.norm(tr['up'])
-        p_origin = -tr['up'] #camera assumed to be at 0,0,0
-        e_origin = np.zeros(3) #zero vector
-        e_rays = R_rect.T @ np.linalg.inv(K_data) @ depth_pixel_coords.T #+0
-        e_rays /= np.linalg.norm(e_rays,axis=0)
-        print('norm:', np.linalg.norm(e_rays[:,100]))
+            #pixel = np.array([j,i,1])
+            p_normal = tr['up']/np.linalg.norm(tr['up'])
+            p_origin = -tr['up'] #camera assumed to be at 0,0,0
+            e_origin = np.zeros(3) #zero vector
+            e_rays = R_rect.T @ np.linalg.inv(K_data) @ depth_pixel_coords.T #+0
+            e_rays /= np.linalg.norm(e_rays,axis=0)
+            print('norm:', np.linalg.norm(e_rays[:,100]))
 
-        intplane = lambda l : intersectPlane(p_normal,p_origin,e_origin,l)
-        #vfunc = np.vectorize(intplane)
-        #depths = np.apply_along_axis(intplane, 0, e_rays)
-        depths = intersectPlaneV(p_normal,p_origin,e_origin,e_rays)
-        points = e_rays * depths[None]
+            intplane = lambda l : intersectPlane(p_normal,p_origin,e_origin,l)
+            #vfunc = np.vectorize(intplane)
+            #depths = np.apply_along_axis(intplane, 0, e_rays)
+            depths = intersectPlaneV(p_normal,p_origin,e_origin,e_rays)
+            points = e_rays * depths[None]
 
-        t2, r2 = Coord2Polar(points[2],points[0])
-        print(r2.max())
-        r2 = np.clip(r2,0,100)
-        print(r2.max())
-        rnorm = r2 / r2.max()
-        t2 = np.clip(t2,-np.pi/4,np.pi/4)
-        tnorm = t2 / t2.max()
+            t2, r2 = Coord2Polar(points[2],points[0])
+            print(r2.max())
+            r2 = np.clip(r2,0,100)
+            print(r2.max())
+            rnorm = r2 / r2.max()
+            t2 = np.clip(t2,-np.pi/4,np.pi/4)
+            tnorm = t2 / t2.max()
 
 
-        #points = np.multiply(e_rays,depths)
+            #points = np.multiply(e_rays,depths)
 
-        #depths = intersectPlane(p_normal,p_origin,e_origin,e_ray)
-        rad_img = np.reshape(tnorm, depth_img.shape)
-        depth_img = np.reshape(depths, depth_img.shape)
-        #print(depth_img.max())
-        #print(depth_img.min())
-        depth_img = np.clip(depth_img,0,1)
-
-        
-        axes[3].set_title('Plane image')
-        axes[3].imshow(depth_img, cmap='jet')
-
+            #depths = intersectPlane(p_normal,p_origin,e_origin,e_ray)
+            rad_img = np.reshape(tnorm, depth_img.shape)
+            depth_img = np.reshape(depths, depth_img.shape)
+            #print(depth_img.max())
+            #print(depth_img.min())
+            depth_img = np.clip(depth_img,0,1)
 
         
-        #axes[3].set_title('Traj in EgoMap')
-        #axes[3].set_xlim((-2*np.pi/3, 2*np.pi/3))
-        ##axes[0].set_ylim(*crowdBoundsY)
-        #axes[3].set_aspect(1)
-        ##axes[1].imshow(img)
+            axes[3].set_title('Plane image')
+            axes[3].imshow(depth_img, cmap='jet')
+
 
         
-        #axes[3].plot(t, logr, 'r')
-        axes[1].set_title('Depth Image')
-        tempval = axes[1].imshow(disp_img)
-        cax = fig.add_axes([.3, .95, .4, .05])
-        fig.colorbar(tempval, cax, orientation='horizontal')
+            #axes[3].set_title('Traj in EgoMap')
+            #axes[3].set_xlim((-2*np.pi/3, 2*np.pi/3))
+            ##axes[0].set_ylim(*crowdBoundsY)
+            #axes[3].set_aspect(1)
+            ##axes[1].imshow(img)
+
+        
+            #axes[3].plot(t, logr, 'r')
+            axes[1].set_title('Depth Image')
+            tempval = axes[1].imshow(disp_img)
+            cax = fig.add_axes([.3, .95, .4, .05])
+            fig.colorbar(tempval, cax, orientation='horizontal')
 
 
-        plt.show()
+            plt.show()
 
        
 
@@ -585,7 +594,8 @@ if __name__ == "__main__":
 
         aspect_ratio = 1# 3/4 #(2*maxT-2*minT)/(maxR-minR)
         ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
-        big_ego_pixel_shape = ego_pixel_shape#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
+        big_ego_pixel_shape = (ego_pixel_shape[0] * 1, ego_pixel_shape[1]*1)#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
+        small_ego_pixel_shape = (ego_pixel_shape[0] // 2, ego_pixel_shape[1] //2)#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
 
         ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
         ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[1]  )
@@ -594,14 +604,21 @@ if __name__ == "__main__":
         ego_pix2r = lambda x : RemapRange(x, 0, ego_pixel_shape[0], minR,maxR   )
         ego_pix2t = lambda x : RemapRange(x,0,ego_pixel_shape[1], minT,maxT  )
 
-
+        
 
         big_ego_pix2r = lambda x : RemapRange(x, 0, big_ego_pixel_shape[0], minR,maxR   )
         big_ego_pix2t = lambda x : RemapRange(x,0,big_ego_pixel_shape[1], minT,maxT  )
 
+        small_ego_pix2r = lambda x : RemapRange(x, 0, small_ego_pixel_shape[0], minR,maxR   )
+        small_ego_pix2t = lambda x : RemapRange(x,0,small_ego_pixel_shape[1], minT,maxT  )
+
         
         big_ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  big_ego_pixel_shape[0]  )
         big_ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  big_ego_pixel_shape[1]  )
+
+
+        small_ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  small_ego_pixel_shape[0]  )
+        small_ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  small_ego_pixel_shape[1]  )
 
 
         RecenterDataForwardWithShape = lambda x, shape : RemapRange(x,0,max(shape[0],shape[1]),-1,1)
@@ -700,7 +717,11 @@ if __name__ == "__main__":
             coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
             coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
 
+            
 
+
+
+            #coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
             
             e_origin = tr['up'] #camera assumed to be at 0,0,0
             #e_origin = np.zeros(3) #zero vector
@@ -809,13 +830,70 @@ if __name__ == "__main__":
             #plt.show()
 
 
+            
+            # Let's try to get a ground truth image
+            all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(big_ego_pixel_shape[0]) for j in range(big_ego_pixel_shape[1]) ], dtype=np.float32)
+            #coord_value = np.zeros((all_pixel_coords.shape[0]))
+
+            multiplier = all_pixel_coords
+
+
+            all_pixel_coords_xformed = np.zeros(all_pixel_coords.shape).astype(np.float32)
+            all_pixel_coords_xformed[:,0] = big_ego_pix2t(all_pixel_coords[:,0])
+            all_pixel_coords_xformed[:,1] = np.exp(big_ego_pix2r(all_pixel_coords[:,1]))
+
+            all_pixel_coords_xformed = np.array(DataReader.Polar2Coord(all_pixel_coords_xformed[:,0],all_pixel_coords_xformed[:,1])).T
+
+
+            small_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(small_ego_pixel_shape[0]) for j in range(small_ego_pixel_shape[1]) ], dtype=np.float32)
+            #coord_value = np.zeros((all_pixel_coords.shape[0]))
+
+            smultiplier = small_pixel_coords
+
+
+            small_pixel_coords_xformed = np.zeros(small_pixel_coords.shape).astype(np.float32)
+            small_pixel_coords_xformed[:,0] = small_ego_pix2t(small_pixel_coords[:,0])
+            small_pixel_coords_xformed[:,1] = np.exp(small_ego_pix2r(small_pixel_coords[:,1]))
+
+            small_pixel_coords_xformed = np.array(DataReader.Polar2Coord(small_pixel_coords_xformed[:,0],small_pixel_coords_xformed[:,1])).T
+            
+
+
+            test_ws_trajectory = []
+            test_pix_trajectory = []
+            for pix in future_trajectory[0]:
+                # print(pix)
+                
+                pix0 = big_ego_t2pix( ego_pix2t(pix[0]) )
+                pix1 = big_ego_r2pix( ego_pix2r(pix[1]) )
+
+                if (pix0 < 0 or pix0 > big_ego_pixel_shape[1] or pix1 < 0 or pix1 > big_ego_pixel_shape[0]): # outside ego map
+                        break
+                #test_pix_trajectory.append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
+                #PIXEL_TRAJECTORY_DICTIONARY[dictionary_index].append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
+                newpoint = ( DataReader.Polar2Coord( big_ego_pix2t(pix0),np.exp(big_ego_pix2r(pix1)) ) )
+                test_ws_trajectory.append( newpoint )
+                test_pix_trajectory.append( (pix0,pix1) )
+
+            if len(test_ws_trajectory) < 2:
+                print("trajectory invalid (leaves egomap early)")
+                continue
+
+
+            global_std_dev = 1
+            coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=global_std_dev/2, dstddev= global_std_dev)
 
 
 
 
 
 
-            fig, axes = plt.subplots(1,4)#, figsize=(18,6))
+            small_coord_derivative = DataGens.Coords2ValueFastWS_NEURIPS_DERIVATIVE(small_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=global_std_dev/2, dstddev= global_std_dev)
+
+
+
+
+            fig, axes = plt.subplots(1,3)#, figsize=(18,6))
             # axes = [ax] # only use if there's 1 column
 
             #newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
@@ -869,11 +947,19 @@ if __name__ == "__main__":
             axes[1].set_aspect(1)
 
             axes[1].imshow(img2)
-
+            #plt.imsave('bigegomap.png',img2)
             
 
             bigtpix = big_ego_t2pix(t)
             bigrpix = big_ego_r2pix(logr)
+            
+            liltpix = ego_t2pix(t)
+            lilrpix = ego_r2pix(logr)
+            
+            #print('first ', bigtpix)
+            #print('second ', bigrpix)
+            #print('third ', liltpix)
+            #print('fourth ', lilrpix)
 
             axes[1].plot(bigtpix,bigrpix, 'rx')
 
@@ -882,47 +968,104 @@ if __name__ == "__main__":
 
 
 
-
-
-
-            axes[2].set_title('EgoRetinal Disparity Map')
             
+
+
+            
+            axes[2].set_title('EgoRetinal Ground Truth')
             boundsX = (0,big_ego_pixel_shape[1])
             boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-            
             axes[2].set_xlim(*boundsX)
             axes[2].set_ylim(*boundsY)
-            axes[2].set_aspect(1)
 
-            tempval = axes[2].imshow(disp_img2)
+            #axes[1].set_xlim(*boundsX)
+            #axes[1].set_ylim(*boundsY)
+
+            tempval = axes[2].imshow(np.reshape(-np.log(-coord_value+1),(big_ego_pixel_shape)), extent=[*boundsX, *(big_ego_pixel_shape[0],0)], interpolation='none', cmap='viridis')#, cmap='gnuplot')
+        
+        
+            trajnp = np.array(test_pix_trajectory)
+            #axes[2].plot(trajnp[:,0], trajnp[:,1], 'r')
+        
+            cax = fig.add_axes([.3, .95, .4, .05])
+            fig.colorbar(tempval, cax, orientation='horizontal')
+
+
+
+
+            #axes[2].set_title('EgoRetinal Disparity Map')
             
+            #boundsX = (0,big_ego_pixel_shape[1])
+            #boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+            #axes[2].set_xlim(*boundsX)
+            #axes[2].set_ylim(*boundsY)
+            #axes[2].set_aspect(1)
+
+            #tempval = axes[2].imshow(disp_img2)
+            
+            #cax = fig.add_axes([.3, .95, .4, .05])
+            #fig.colorbar(tempval, cax, orientation='horizontal')
+
+            
+
+            #bigtpix = big_ego_t2pix(t)
+            #bigrpix = big_ego_r2pix(logr)
+
+            #axes[2].plot(bigtpix,bigrpix, 'rx')
+
+
+            #axes[2].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'b')
+            plt.show()
+            
+            fig, axes = plt.subplots(1,2)#, figsize=(18,6))
+            #axes = [ax]
+
+            axes[0].set_title('Derivative of GT Field')
+            boundsX = (0,small_ego_pixel_shape[1])
+            boundsY = (0,small_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            axes[0].set_xlim(*boundsX)
+            axes[0].set_ylim(*boundsY)
+            axes[0].set_aspect(1)
+
+            normalized_derivatives = small_coord_derivative / np.linalg.norm(small_coord_derivative,axis=1)[:,None]
+
+            #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
+
+            axes[0].quiver(small_pixel_coords[:,0], small_pixel_coords[:,1], -normalized_derivatives[:,0],-normalized_derivatives[:,1], color='red', units='xy' ,scale=1)
+
+            axes[1].set_title('EgoRetinal Ground Truth')
+            boundsX = (0,big_ego_pixel_shape[1])
+            boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            axes[1].set_xlim(*boundsX)
+            axes[1].set_ylim(*boundsY)
+
+            #axes[1].set_xlim(*boundsX)
+            #axes[1].set_ylim(*boundsY)
+
+            tempval = axes[1].imshow(np.reshape(-np.log(-coord_value+1),(big_ego_pixel_shape)), extent=[*boundsX, *(big_ego_pixel_shape[0],0)], interpolation='none', cmap='viridis')#, cmap='gnuplot')
+        
+        
+            trajnp = np.array(test_pix_trajectory)
+            #axes[2].plot(trajnp[:,0], trajnp[:,1], 'r')
+        
             cax = fig.add_axes([.3, .95, .4, .05])
             fig.colorbar(tempval, cax, orientation='horizontal')
 
             
+            #axes[3].set_title('Polar In Image')
 
-            bigtpix = big_ego_t2pix(t)
-            bigrpix = big_ego_r2pix(logr)
+            #axes[3].imshow(img)
 
-            axes[2].plot(bigtpix,bigrpix, 'rx')
-
-
-            #axes[2].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'b')
-
-
-
-
-
+            #axes[3].plot(pixels[0,:],pixels[1,:],'bo')
             
-            axes[3].set_title('Polar In Image')
-
-            axes[3].imshow(img)
-
-            axes[3].plot(pixels[0,:],pixels[1,:],'bo')
-            
-            figManager = plt.get_current_fig_manager()
-            figManager.window.showMaximized()
+            #figManager = plt.get_current_fig_manager()
+            #figManager.window.showMaximized()
             plt.show()
+
+
+
+
             #cv2.imshow('intermediate',intermediate)
             #cv2.waitKey()
 

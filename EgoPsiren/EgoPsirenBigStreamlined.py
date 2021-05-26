@@ -158,7 +158,7 @@ USE_EGO = True
 if __name__ == "__main__":
     #DNN.current_epoch = 0
 
-    BATCH_SIZE = 4
+    BATCH_SIZE = 1
     N_WORKERS = 0
     
     # TODO put these values in a settings file on disk to force uniformity across programs
@@ -829,11 +829,17 @@ if __name__ == "__main__":
         #hyper_trajectory_data_set = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
 
-        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
 
-        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDataset(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
+
+        # hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        ##i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
+
+        #hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDataset(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        ##i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
 
 
 
@@ -856,7 +862,7 @@ if __name__ == "__main__":
         learning_rate = 5e-5#1e-5
         #loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()
         #loss_function2 = DNN.laplacian_mse_with_coords
-        loss_function3 = DNN.value_mse_with_coords
+        loss_function3 = DNN.value_mse_NEURIPS_with_coords #DNN.value_mse_with_coords
         
 
         #trajectory_training_dataset = trajectory_data_set
@@ -1029,7 +1035,7 @@ if __name__ == "__main__":
             print(all_coords.shape)
             predictions = network({'coords':all_coords,'img_sparse':test_image_prediction})
             if type(predictions) is dict:
-                outImage = (predictions['model_out'], predictions['model_in'])
+                outImage = (predictions['siren_out'], predictions['model_in'])
             else:
                 outImage = predictions
             print('max',torch.max(outImage[0]))

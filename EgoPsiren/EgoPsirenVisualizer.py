@@ -50,8 +50,10 @@ if __name__ == "__main__":
     #'overfit_test_network_exp_with_goal.pt'
     #overfit_ego_map_with_mask_newnewloss_square192_55kernel_aligned BAD
     #overfit_imploc_aligned_nogoal_192.pt #192
-    network = torch.load('overfit_imploc_aligned_nogoal_192.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
-    vae_network = torch.load('overfit_test_network_exp_AE_GOOD.pt') #''overfit_test_network_exp_AE.pt
+    #overfit_imploc_aligned_goal_192.pt #192
+    #overfit_synth_marketplace_random2020 synthetic data
+    network = torch.load('overfit_synth_marketplace_random2020.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
+    vae_network = torch.load('overfit_imploc_VAE_192_aligned.pt') #''overfit_test_network_exp_AE.pt
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
         network = network.module
@@ -67,9 +69,9 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path = 'S:\\fut_loc\\train\\' #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\'
+    partial_folder_path = 'S:\\fut_loc\\train\\' #'S:\\synth_marketplace_random2020\\test\\' #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\'
     
-    folder_name =  '10000000_test_00' #'marketplace6203_trand_p0' #'20150402_grocery' #'20150418_mall_00' #'20150401_walk_00' #'20150419_ikea' #
+    folder_name = '10000000_test_00' #'marketplace6203_trand_p0' #'20150402_grocery' #'20150418_mall_00' #'20150401_walk_00' #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t38_p18' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -206,7 +208,7 @@ if __name__ == "__main__":
         frameEnd = len(os.listdir(folder_path + 'im\\')) #55
         imageScale = .1
 
-        for iFrame in range(0,frameEnd):
+        for iFrame in range(frameOffset,frameEnd):
 
             dictionary_index = iFrame + count * FILE_UPPER_LIMIT
 
@@ -699,7 +701,7 @@ if __name__ == "__main__":
             #coord_value = DataGens.Coords2ValueFast(all_pixel_coords,future_trajectory,nscale=1)
 
             if (PRINT_DEBUG_IMAGES):
-                coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
+                coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
                 fig, ax = plt.subplots(1,1)#, figsize=(36,6))
                 axes = [ax]
 
@@ -752,7 +754,7 @@ if __name__ == "__main__":
             all_pixel_coords_xformed[:,1] = np.exp(ego_pix2r(all_pixel_coords[:,1]))
             all_pixel_coords_xformed = np.array(DataReader.Polar2Coord(all_pixel_coords_xformed[:,0],all_pixel_coords_xformed[:,1])).T
 
-            test_coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
+            test_coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=4)#.5)
 
             test_image_prediction = torch.from_numpy( np.expand_dims(test_image,0) )
             print(test_image_prediction.device)
@@ -829,7 +831,15 @@ if __name__ == "__main__":
             outImagea = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
 
 
+            predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
+            if type(predictions) is dict:
+                outImage = (predictions['siren_out'], predictions['model_in'])
+            else:
+                outImage = predictions
+            sirenimage = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
             
+
+
             if USE_INTENSITY:
                 image_siren_image = interpolate.interpn((range(outImagea.shape[0]),range(outImagea.shape[1])), outImagea, image_siren_pix_coords[[1,0]].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(img.shape[0], img.shape[1])
                 #image_siren_image = interpolate.interpn((np.array(list(range(outImagea.shape[0])))+.5,np.array(list(range(outImagea.shape[1])))+.5), outImagea, image_siren_pix_coords[[1,0]].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(img.shape[0], img.shape[1])
@@ -1146,7 +1156,9 @@ if __name__ == "__main__":
                 axes[1].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
                 print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
                 #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
-        
+                #plt.imsave('walkable.png',intensity_map, cmap='plasma')
+                #plt.imsave('egomap.png', np.moveaxis(0.5*(test_image+1),0,-1))
+                #plt.imsave('siren.png', sirenimage, cmap='viridis')
             
 
             axes[0+load_offset].set_title('Input Image with Mask')#(Unnormalized)')
@@ -1157,13 +1169,14 @@ if __name__ == "__main__":
             axes[0+load_offset].set_ylim(*boundsY)
             axes[0+load_offset].set_aspect(1)
             axes[0+load_offset].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
+            #axes[0+load_offset].imshow(sirenimage, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
             axes[0+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             axes[0+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
             axes[0+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
             axes[0+load_offset].plot(traj_t_pix,traj_r_pix,'r',linewidth=2)
             xn,yn = DataGens.InterpAlongLine(tpix_AlexNet,rpix_AlexNet,25)
             axes[0+load_offset].plot(xn,yn,'cx')
-
+            
 
             traj = np.array(test_pix_trajectory).T
             tx, ty = DataGens.InterpAlongLine(traj[0],traj[1],25)
@@ -1181,7 +1194,7 @@ if __name__ == "__main__":
 
             tx = RecenterTrajDataBackward_VAE( traj[0,:25] )
             ty = RecenterTrajDataBackward_VAE( traj[0,25:] )
-            axes[0+load_offset].plot(tx,ty,'rx')
+            #axes[0+load_offset].plot(tx,ty,'rx')
 
 
 

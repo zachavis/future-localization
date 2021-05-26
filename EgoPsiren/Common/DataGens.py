@@ -749,6 +749,104 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
 
 
 
+
+
+
+
+
+class MassiveHyperTrajectoryDatasetNEURIPS(torch.utils.data.Dataset):
+  'Characterizes a dataset for PyTorch'
+  def __init__(self, trajectories, pixeltrajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
+    'Initialization'
+    
+    self.trajectories = trajectories
+    #self.obstacles = obstacles
+    #self.obstacle_multiplier = multiplier
+    #self.buffer = .1
+    self.recenteringFn = recenteringFn
+    self.uncenteringFn = uncenteringFn
+    self.images = images
+    self.totalpoints = numItems
+
+    self.img_points = img_points.astype(np.float32)
+    self.datascale = 1
+    self.pix2tfn = pix2tfn
+    self.pix2rfn = pix2rfn
+    self.polarfn = polarfn
+
+    self.datalength = len(images)
+    self.width = 1 #.5
+    self.random = random
+
+    self.pixeltrajectories = pixeltrajectories
+
+
+
+  def __len__(self):
+    'Denotes the total number of samples'
+    return self.datalength
+
+  def GetImageTrajectoryPair(self,index):
+      
+    key = list(self.images.keys())[index]
+    
+    if self.random:
+        input = self.uncenteringFn((np.random.rand(self.totalpoints,2)*2.0-1.0).astype(np.float32))
+    else:
+    #random_choice = np.random.choice(len(self.img_points), size=150, replace=False)
+        input = np.copy(self.img_points)
+    xformed_input = np.zeros(input.shape)
+    xformed_input[:,0] = self.pix2tfn(input[:,0])
+    xformed_input[:,1] = np.exp(self.pix2rfn(input[:,1]))
+
+    xformed_input = np.array(self.polarfn(xformed_input[:,0],xformed_input[:,1])).T
+
+
+    #output = (np.expand_dims(Coords2ValueFast(input,self.trajectories,1),0) / 30).astype(np.float32)Coords2ValueFastWS
+    output = ( np.expand_dims(Coords2ValueFastWS_NEURIPS(xformed_input,{0:self.trajectories[key]},None,None,self.width,self.width),-1) / self.datascale).astype(np.float32)
+
+
+    #input = np.expand_dims(input,0)
+
+    traj = self.pixeltrajectories[key]
+    goal_pos = self.recenteringFn( np.array([traj[0][-1],traj[1][-1]]).astype(np.float32) )
+
+
+
+    
+    dsiren_input = self.uncenteringFn((np.random.rand(10000,2)*2.0-1.0).astype(np.float32))
+    dsiren_xformed_input = np.zeros(dsiren_input.shape)
+    dsiren_xformed_input[:,0] = self.pix2tfn(dsiren_input[:,0])
+    dsiren_xformed_input[:,1] = np.exp(self.pix2rfn(dsiren_input[:,1]))
+    dsiren_xformed_input = np.array(self.polarfn(dsiren_xformed_input[:,0],dsiren_xformed_input[:,1])).T
+
+    derivs = Coords2ValueFastWS_NEURIPS_DERIVATIVE(dsiren_xformed_input,{0:self.trajectories[key]},None,None,self.width,self.width)
+    maximumval = np.max(derivs)
+    minimumval = np.min(derivs)
+    dsiren_output_gradients = ( derivs / self.datascale).astype(np.float32) #/np.linalg.norm(derivs,axis=1)[:,None]
+    
+    #dsiren_output_gradients = dsiren_output_gradients[:,[1,0]] 
+    return {'img_sparse':self.images[key], 'coords':self.recenteringFn(input), 'derivative_siren':{'coords':self.recenteringFn(dsiren_input) } }, {'field':output, 'gradient':dsiren_output_gradients, 'goal':goal_pos} #self.recenteringFn(input), output #
+
+
+  def __getitem__(self, index):
+    'Generates one sample of data'
+    return self.GetImageTrajectoryPair(index)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class MassiveAutoEncoderTrajectoryDataset(torch.utils.data.Dataset):
   'Characterizes a dataset for PyTorch'
   def __init__(self, trajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
@@ -1027,10 +1125,14 @@ def Coords2ValueFastWS(all_pixel_coords, trajectory_dictionary, coordXform_FORWA
 
 
 
+#DENSITY_STD = 20
 
+GT_SCALE = 25
 
 # Sample points in world space (likely pixel centers), trajectory in world space, unused, unused, stddev from gaussian
-def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXform_FORWARD, coordXform_BACKWARD, stddev = 1):
+def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXform_FORWARD, coordXform_BACKWARD, stddev = 1, dstddev =None):
+    if dstddev is None:
+        dstddev = stddev
     coord_value = np.zeros((all_pixel_coords.shape[0])) # where value function will be stored.
     closest_distance = np.inf # might be unused...
     time_along_trajectory = 0 # don't know
@@ -1042,7 +1144,7 @@ def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXfo
                 
         traj_dists = traj - traj[:,None]
         traj_dists = np.linalg.norm(traj_dists,axis=2) # magnitude of distances to every point on trajectory
-        density  = np.exp( - .5 * traj_dists**2 / stddev )
+        density  = np.exp( - .5 * traj_dists**2 / dstddev )
         density  = np.sum(density, axis=1)
         
         #next_pts = np.zeros((traj.shape[0], 2))
@@ -1075,7 +1177,7 @@ def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXfo
         weighted_sum = np.sum(product,axis=1)
         #max_weighted_sum = np.min(weighted_sum)
         final = weighted_sum
-        coord_value = final
+        coord_value = final/GT_SCALE
 
 
 
@@ -1169,6 +1271,114 @@ def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXfo
 
     return coord_value
 
+def Coords2ValueFastWS_NEURIPS_DERIVATIVE(all_pixel_coords, trajectory_dictionary, coordXform_FORWARD, coordXform_BACKWARD, stddev = 1, dstddev =None):
+    if dstddev is None:
+        dstddev = stddev
+    coord_deriv = np.zeros((all_pixel_coords.shape[0],2)) # where derivative of the value function will be stored.
+    closest_distance = np.inf # might be unused...
+    time_along_trajectory = 0 # don't know
+    for key in trajectory_dictionary.keys():
+        traj = np.array(trajectory_dictionary[key],dtype=np.float32) # trajectory in world space
+        traj_len = len(traj)
+        diffs = traj - all_pixel_coords[:,None] # diff from every point on the trajectory to all pixel coordinates
+        dists = np.linalg.norm(diffs,axis=2) # magnitude of diffs (distances) to every point on trajectory
+                
+        traj_dists = traj - traj[:,None]
+        traj_dists = np.linalg.norm(traj_dists,axis=2) # magnitude of distances to every point on trajectory
+        density  = np.exp( - .5 * traj_dists**2 / dstddev )
+        density  = np.sum(density, axis=1)
+        
+        #next_pts = np.zeros((traj.shape[0], 2))
+        prev_pts = np.zeros((traj.shape[0], 2))
+        prev_pts[1:] = traj[:-1]
+        prev_pts[0] = traj[0]
+        vecLines = traj-prev_pts
+        vecLinesMag = np.linalg.norm(vecLines,axis=1)
+        distAlongTraj = np.cumsum(vecLinesMag)
+
+
+
+
+        #end = distAlongTraj[-1] # trajectory length (path integral)
+        #distAlongTraj /= distAlongTraj[-1] # trajectory distance is always 1 at the goal. TODO is this okay?
+        #end = distAlongTraj[-1] # unit path integral
+
+        #dists /= distAlongTraj[-1]
+
+        # now let's get the weighted sum of gaussians multiplied by the path integral
+
+        #testing = np.zeros(traj.shape[0])
+        #testing[0] = 1
+
+        total_dist = distAlongTraj[-1]
+
+        if (len(density) > 1):
+            density[0] = density[1]
+            density[-1] = density[-2]
+
+        gaussians = -np.exp( - .5 * dists**2 / stddev )  #stats.norm.pdf(dists,scale=stddev)
+        vecLines_x = vecLines[:,0]
+        vecLines_y = vecLines[:,1]
+        first_term_x = gaussians * vecLines_x[None] / density[None]
+        first_term_y = gaussians * vecLines_y[None] / density[None]
+        first_term = np.stack((first_term_x,first_term_y),axis=2)
+
+        weighted_diffs = diffs/(stddev**2)
+        weighted_diffs_x = weighted_diffs[:,:,0]
+        weighted_diffs_y = weighted_diffs[:,:,1]
+        
+        product = gaussians * distAlongTraj[None] / density[None]
+        
+        second_term_x = product * weighted_diffs_x
+        second_term_y = product * weighted_diffs_y
+        
+        second_term = np.stack((second_term_x,second_term_y),axis=2)
+
+        total_term = first_term + second_term
+
+        grads = np.sum(total_term,axis=1)
+        #max_weighted_sum = np.min(weighted_sum)
+        #final = summed
+        grads/=GT_SCALE
+
+        # ROTATE INTO SIREN SPACE
+        t,r = Coord2Polar(all_pixel_coords[:,0],all_pixel_coords[:,1])
+
+        logr = np.log(r)
+        rdenom = 1.0/r
+        sint = np.sin(t)
+        cost = np.cos(t)
+
+        jacobians = np.zeros((len(t),2,2))
+        #jacobians[:,0,0] = -logr*sint #dx/dt
+        #jacobians[:,0,1] =  logr*cost #dy/dt
+        #jacobians[:,1,0] = rdenom*cost #dx/dr
+        #jacobians[:,1,1] = rdenom*sint #dy/dr
+        jacobians[:,0,0] = -np.log(r)*np.sin(t) #dx/dt
+        jacobians[:,0,1] =  np.log(r)*np.cos(t) #dy/dt
+        jacobians[:,1,0] = 1.0/r*np.cos(t) #dx/dr
+        jacobians[:,1,1] = 1.0/r*np.sin(t) #dy/dr
+
+        tjacobians = torch.from_numpy(jacobians)
+        tgrads = torch.from_numpy(np.expand_dims(grads,-1))
+        tjacobians.requires_grad = False
+        tgrads.requires_grad = False
+        tfinal = torch.bmm(tjacobians,tgrads)
+        final = tfinal.numpy()
+
+
+    return np.squeeze(final)
+
+def Coord2Polar(x,y):
+    #z= np.random.random((10,2))
+    #x,y = z[0,:], z[1,:]
+    r = np.sqrt(x**2+y**2)
+    t = np.arctan2(y,x)
+    
+    return t,r
+    # np.stack((r,t,)) #np.concatenate((r,t),axis=1)
+    #print(r)
+    #print(t)
 
 
 
