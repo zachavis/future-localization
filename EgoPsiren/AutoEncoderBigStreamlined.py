@@ -157,8 +157,8 @@ USE_EGO = True
 if __name__ == "__main__":
     #DNN.current_epoch = 0
 
-    BATCH_SIZE = 16
-    N_WORKERS = 0
+    BATCH_SIZE = 32
+    N_WORKERS = 8
     
     # TODO put these values in a settings file on disk to force uniformity across programs
     img_height = 192 #256#128#64
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
     
     FILE_UPPER_LIMIT = 1000 # a number larger than the number of images in a single directory, used for dictionary indexing
-    n_folders = 1
+    n_folders = 100
 
 
     # FORNOW: Just going to assume it's only in train mode
@@ -360,7 +360,7 @@ if __name__ == "__main__":
             princ_y2 = float(data[1])
 
             K_data = np.array([[focal_x, 0, princ_x],[ 0, focal_y, princ_y],[ 0, 0, 1]])
-            R_rect = np.array([[0.9989,0.0040,0.0466],[-0.0040,1.0000,-0.0002],[-0.0466,0,0.9989]])
+            R_rect = np.eye(3) #np.array([[0.9989,0.0040,0.0466],[-0.0040,1.0000,-0.0002],[-0.0466,0,0.9989]])
             #fclose(fid);
 
             fid.close()
@@ -915,7 +915,7 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
         #loss_function = nn.MSELoss()
         #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
-        testModel = DNN.ConvolutionalAutoEncoderToPath(in_features=3,path_length=25,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        testModel = DNN.ConvolutionalAutoEncoderToPath2(in_features=3,path_length=25,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
         
         #DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
         testModel.cuda()

@@ -775,7 +775,8 @@ class MassiveHyperTrajectoryDatasetNEURIPS(torch.utils.data.Dataset):
     self.polarfn = polarfn
 
     self.datalength = len(images)
-    self.width = 1 #.5
+    self.width = .5 #.5
+    self.densitywidth = 1
     self.random = random
 
     self.pixeltrajectories = pixeltrajectories
@@ -803,7 +804,7 @@ class MassiveHyperTrajectoryDatasetNEURIPS(torch.utils.data.Dataset):
 
 
     #output = (np.expand_dims(Coords2ValueFast(input,self.trajectories,1),0) / 30).astype(np.float32)Coords2ValueFastWS
-    output = ( np.expand_dims(Coords2ValueFastWS_NEURIPS(xformed_input,{0:self.trajectories[key]},None,None,self.width,self.width),-1) / self.datascale).astype(np.float32)
+    output = ( np.expand_dims(Coords2ValueFastWS_NEURIPS(xformed_input,{0:self.trajectories[key]},None,None,self.width,self.densitywidth),-1) / self.datascale).astype(np.float32)
 
 
     #input = np.expand_dims(input,0)
@@ -814,13 +815,13 @@ class MassiveHyperTrajectoryDatasetNEURIPS(torch.utils.data.Dataset):
 
 
     
-    dsiren_input = self.uncenteringFn((np.random.rand(10000,2)*2.0-1.0).astype(np.float32))
+    dsiren_input = self.uncenteringFn((np.random.rand(2500,2)*2.0-1.0).astype(np.float32))
     dsiren_xformed_input = np.zeros(dsiren_input.shape)
     dsiren_xformed_input[:,0] = self.pix2tfn(dsiren_input[:,0])
     dsiren_xformed_input[:,1] = np.exp(self.pix2rfn(dsiren_input[:,1]))
     dsiren_xformed_input = np.array(self.polarfn(dsiren_xformed_input[:,0],dsiren_xformed_input[:,1])).T
 
-    derivs = Coords2ValueFastWS_NEURIPS_DERIVATIVE(dsiren_xformed_input,{0:self.trajectories[key]},None,None,self.width,self.width)
+    derivs = Coords2ValueFastWS_NEURIPS_DERIVATIVE(dsiren_xformed_input,{0:self.trajectories[key]},None,None,self.width,self.densitywidth)
     maximumval = np.max(derivs)
     minimumval = np.min(derivs)
     dsiren_output_gradients = ( derivs / self.datascale).astype(np.float32) #/np.linalg.norm(derivs,axis=1)[:,None]
@@ -1127,7 +1128,7 @@ def Coords2ValueFastWS(all_pixel_coords, trajectory_dictionary, coordXform_FORWA
 
 #DENSITY_STD = 20
 
-GT_SCALE = 25
+GT_SCALE = 1
 
 # Sample points in world space (likely pixel centers), trajectory in world space, unused, unused, stddev from gaussian
 def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXform_FORWARD, coordXform_BACKWARD, stddev = 1, dstddev =None):
@@ -1157,7 +1158,9 @@ def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXfo
 
         #end = distAlongTraj[-1] # trajectory length (path integral)
         #distAlongTraj /= distAlongTraj[-1] # trajectory distance is always 1 at the goal. TODO is this okay?
-        #end = distAlongTraj[-1] # unit path integral
+        #vecLines /= distAlongTraj[-1]
+        distAlongTraj = 1-np.exp(-distAlongTraj*.5)
+#end = distAlongTraj[-1] # unit path integral
 
         #dists /= distAlongTraj[-1]
 
@@ -1301,6 +1304,9 @@ def Coords2ValueFastWS_NEURIPS_DERIVATIVE(all_pixel_coords, trajectory_dictionar
 
         #end = distAlongTraj[-1] # trajectory length (path integral)
         #distAlongTraj /= distAlongTraj[-1] # trajectory distance is always 1 at the goal. TODO is this okay?
+        #vecLines /= distAlongTraj[-1]
+        distAlongTrajExp = 1 - np.exp(-distAlongTraj*.5)
+
         #end = distAlongTraj[-1] # unit path integral
 
         #dists /= distAlongTraj[-1]
@@ -1319,15 +1325,15 @@ def Coords2ValueFastWS_NEURIPS_DERIVATIVE(all_pixel_coords, trajectory_dictionar
         gaussians = -np.exp( - .5 * dists**2 / stddev )  #stats.norm.pdf(dists,scale=stddev)
         vecLines_x = vecLines[:,0]
         vecLines_y = vecLines[:,1]
-        first_term_x = gaussians * vecLines_x[None] / density[None]
-        first_term_y = gaussians * vecLines_y[None] / density[None]
+        first_term_x = gaussians * 0.5 * np.exp(-0.5 * distAlongTraj)[None] * vecLines_x[None] / density[None]
+        first_term_y = gaussians * 0.5 * np.exp(-0.5 * distAlongTraj)[None] * vecLines_y[None] / density[None]
         first_term = np.stack((first_term_x,first_term_y),axis=2)
 
         weighted_diffs = diffs/(stddev**2)
         weighted_diffs_x = weighted_diffs[:,:,0]
         weighted_diffs_y = weighted_diffs[:,:,1]
         
-        product = gaussians * distAlongTraj[None] / density[None]
+        product = gaussians * distAlongTrajExp[None] / density[None]
         
         second_term_x = product * weighted_diffs_x
         second_term_y = product * weighted_diffs_y
