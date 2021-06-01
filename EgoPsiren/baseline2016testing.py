@@ -429,10 +429,12 @@ if __name__ == "__main__":
         
                 
                 tr_ground = K_data @ R_rect @ tr_ground_OG;
-                if np.any(tr_ground[2,:]<0):
-                    #tr_ground[:2,:] = np.nan # actually maybe I shouldn't NAN here, the only issue is that the trajectory goes behind the camera. Maybe that's okay?
-                    print('\tThe trajectory is suspicious, and may be behind the user. SKIPPING')
-                    continue
+
+                #if np.any(tr_ground[2,:]<0):
+                #    #tr_ground[:2,:] = np.nan # actually maybe I shouldn't NAN here, the only issue is that the trajectory goes behind the camera. Maybe that's okay?
+                #    print('\tThe trajectory is suspicious, and may be behind the user. SKIPPING')
+                #    continue
+
                 #tr_ground(tr_ground(3,:)<0, :) = NaN;
                 #tr_ground = bsxfun(@rdivide, tr_ground(1:2,:), tr_ground(3,:));
                 tr_ground = tr_ground[:2] / tr_ground[2]
@@ -458,7 +460,13 @@ if __name__ == "__main__":
                 #world_forward = 
 
                 r_y = -tr['up']/np.linalg.norm(tr['up'])
-                old_r_z = np.array([0,0,1])
+
+                v = tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+                if v @ np.array([0,0,1]) > .2:
+                    old_r_z = v
+                else:
+                    print("\tSkipping because of alignment severity")
+                    continue
                 r_z = old_r_z - (old_r_z@r_y)*r_y
                 r_z /= np.linalg.norm(r_z)
                 r_x = np.cross(r_y, r_z)
@@ -705,6 +713,21 @@ if __name__ == "__main__":
         
 
 
+                # Check if first two pixels are within egomap
+                pix1 = future_trajectory[0]
+                pix2 = future_trajectory[1]
+
+                if (pix1[0] < 0 or pix1[0] > ego_pixel_shape[1] 
+                    or pix1[1] < 0 or pix1[1] > ego_pixel_shape[0]
+                    or pix2[0] < 0 or pix2[0] > ego_pixel_shape[1] 
+                    or pix2[1] < 0 or pix2[1] > ego_pixel_shape[0]):
+
+                    print('\tTrajectory is deficient (start is outside egomap)')
+                    continue
+
+
+
+
                 # START POPULATING DICTIONARIES            
                 if (LOAD_NETWORK_FROM_DISK):
                     TRAJ_IN_IMAGE_DICTIONARY[dictionary_index] = tr_ground
@@ -714,7 +737,17 @@ if __name__ == "__main__":
                 PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 COORD_TRAJECTORY_DICTIONARY[dictionary_index] = []
+                
+                #for pix in future_trajectory:
+                #    PIXEL_TRAJECTORY_DICTIONARY[dictionary_index].append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
+                #    logpolar_coord = (ego_pix2t(pix[0]),ego_pix2r(pix[1]))
+                #    newpoint = ( Polar2Coord( logpolar_coord[0],np.exp(logpolar_coord[1]) ) )
+                #    LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index].append( logpolar_coord )
+                #    COORD_TRAJECTORY_DICTIONARY[dictionary_index].append( newpoint )
+
                 for pix in future_trajectory:
+                    if (pix[0] < 0 or pix[0] > ego_pixel_shape[1] or pix[1] < 0 or pix[1] > ego_pixel_shape[0]): # outside ego map
+                        break
                     PIXEL_TRAJECTORY_DICTIONARY[dictionary_index].append( (pix[0], pix[1]) ) # t is horizontal axis, logr is vertical
                     logpolar_coord = (ego_pix2t(pix[0]),ego_pix2r(pix[1]))
                     newpoint = ( Polar2Coord( logpolar_coord[0],np.exp(logpolar_coord[1]) ) )
@@ -763,6 +796,7 @@ if __name__ == "__main__":
 
 
     model = torch.hub.load('pytorch/vision:v0.9.0', 'alexnet', pretrained=True)
+    model.eval()
     mods = list(model.named_modules())
     model.named_modules()
     children = model.children()
@@ -792,7 +826,7 @@ if __name__ == "__main__":
 
         returns = model(img)
         feature = activation['classifier.4']
-        descriptors[i] = feature
+        descriptors[i] = feature[0].numpy()
         i += 1
 
         
@@ -802,7 +836,7 @@ if __name__ == "__main__":
     returns = model(testimg)
     feature = activation['classifier.4']
     
-    dist, idx = knn.kneighbors(feature)
+    dist, idx = knn.kneighbors(feature.numpy())
 
 
     #check = np.array(list(RESIZED_IMAGE_DICTIONARY_TR.keys())) == np.array(list(LOG_POLAR_TRAJECTORY_DICTIONARY_TR.keys()))
@@ -810,15 +844,15 @@ if __name__ == "__main__":
     nearest_feature = LOG_POLAR_TRAJECTORY_DICTIONARY_TR[list(RESIZED_IMAGE_DICTIONARY_TR.keys())[idx[0,0]]]
        
     
-    knnPickle = open('knn_alexfeats.knn','wb')
+    knnPickle = open('knn_alexfeats_aligned_full_FIXED.knn','wb')
     pickle.dump(knn,knnPickle)
     knnPickle.close()
 
-    dictPickle = open('knn_traintraj.dict','wb')
+    dictPickle = open('knn_traintraj_aligned_full_FIXED.dict','wb')
     pickle.dump(LOG_POLAR_TRAJECTORY_DICTIONARY_TR,dictPickle)
     dictPickle.close()
 
-
+    print("finished")
     model.eval()
 
 

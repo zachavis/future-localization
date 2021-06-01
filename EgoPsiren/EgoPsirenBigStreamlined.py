@@ -184,7 +184,7 @@ if __name__ == "__main__":
     outputfile = ''
     overfitoutputfile = ''
     
-    train_test_directories = ['train','test']
+    train_test_directories = ['dummytrain','dummytest']
 
     try:
         opts, args = getopt.getopt(sys.argv[1:],"vd:i:o:",["verbose","data=","imodel=","omodel="])
@@ -283,7 +283,7 @@ if __name__ == "__main__":
 
     for data_subset in train_test_directories:
 
-        if data_subset == 'train':
+        if data_subset == 'dummytrain':
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TR
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TR
             COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TR
@@ -293,7 +293,7 @@ if __name__ == "__main__":
             TRAJ_IN_IMAGE_DICTIONARY = TRAJ_IN_IMAGE_DICTIONARY_TR
             
         
-        if data_subset == 'test':
+        if data_subset == 'dummytest':
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TE
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TE
             COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TE

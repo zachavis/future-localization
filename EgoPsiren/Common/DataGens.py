@@ -1113,7 +1113,7 @@ def Coords2ValueFastWS(all_pixel_coords, trajectory_dictionary, coordXform_FORWA
         closest_distances = current_distance
         time_along_trajectory = current_time
                 
-    time_along_trajectory = np.log(time_along_trajectory+1)
+    time_along_trajectory = 1 - np.exp(-time_along_trajectory*0.3) #np.log(time_along_trajectory+1)#
     values = -stats.norm.pdf(closest_distances,scale=stddev) * time_along_trajectory#time_along_trajectory
     coord_value = values
 
@@ -1127,8 +1127,10 @@ def Coords2ValueFastWS(all_pixel_coords, trajectory_dictionary, coordXform_FORWA
 
 #DENSITY_STD = 20
 
-GT_SCALE = 25
-
+GT_SCALE = 1
+GT_ALPHA = 0.03 #0.03
+GT_FT_SCALER = 100 #100
+GT_USEJACOBIAN = False
 # Sample points in world space (likely pixel centers), trajectory in world space, unused, unused, stddev from gaussian
 def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXform_FORWARD, coordXform_BACKWARD, stddev = 1, dstddev =None):
     if dstddev is None:
@@ -1153,10 +1155,15 @@ def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXfo
         prev_pts[0] = traj[0]
         vecLines = traj-prev_pts
         vecLinesMag = np.linalg.norm(vecLines,axis=1)
+        # vecLinesMag = np.log(vecLinesMag+1)
         distAlongTraj = np.cumsum(vecLinesMag)
 
         #end = distAlongTraj[-1] # trajectory length (path integral)
         #distAlongTraj /= distAlongTraj[-1] # trajectory distance is always 1 at the goal. TODO is this okay?
+        #vecLinesMag /= distAlongTraj[-1] # trajectory distance is always 1 at the goal. TODO is this okay?
+
+        distAlongTraj = 1 - np.exp(-distAlongTraj*GT_ALPHA)#np.log(distAlongTraj+1)
+
         #end = distAlongTraj[-1] # unit path integral
 
         #dists /= distAlongTraj[-1]
@@ -1177,7 +1184,7 @@ def Coords2ValueFastWS_NEURIPS(all_pixel_coords, trajectory_dictionary, coordXfo
         weighted_sum = np.sum(product,axis=1)
         #max_weighted_sum = np.min(weighted_sum)
         final = weighted_sum
-        coord_value = final/GT_SCALE
+        coord_value = final#/GT_SCALE
 
 
 
@@ -1301,6 +1308,13 @@ def Coords2ValueFastWS_NEURIPS_DERIVATIVE(all_pixel_coords, trajectory_dictionar
 
         #end = distAlongTraj[-1] # trajectory length (path integral)
         #distAlongTraj /= distAlongTraj[-1] # trajectory distance is always 1 at the goal. TODO is this okay?
+        #vecLinesMag /= distAlongTraj[-1] # trajectory distance is always 1 at the goal. TODO is this okay?
+        #vecLines /= distAlongTraj[-1]
+
+        distAlongTrajExp = 1 - np.exp(-distAlongTraj*GT_ALPHA)
+
+
+
         #end = distAlongTraj[-1] # unit path integral
 
         #dists /= distAlongTraj[-1]
@@ -1319,22 +1333,22 @@ def Coords2ValueFastWS_NEURIPS_DERIVATIVE(all_pixel_coords, trajectory_dictionar
         gaussians = -np.exp( - .5 * dists**2 / stddev )  #stats.norm.pdf(dists,scale=stddev)
         vecLines_x = vecLines[:,0]
         vecLines_y = vecLines[:,1]
-        first_term_x = gaussians * vecLines_x[None] / density[None]
-        first_term_y = gaussians * vecLines_y[None] / density[None]
+        first_term_x = gaussians * GT_ALPHA * np.exp(-GT_ALPHA *distAlongTraj)[None] * vecLines_x[None] / density[None]
+        first_term_y = gaussians * GT_ALPHA * np.exp(-GT_ALPHA *distAlongTraj)[None] * vecLines_y[None] / density[None]
         first_term = np.stack((first_term_x,first_term_y),axis=2)
 
         weighted_diffs = diffs/(stddev**2)
         weighted_diffs_x = weighted_diffs[:,:,0]
         weighted_diffs_y = weighted_diffs[:,:,1]
         
-        product = gaussians * distAlongTraj[None] / density[None]
+        product = gaussians * distAlongTrajExp[None] / density[None]
         
         second_term_x = product * weighted_diffs_x
         second_term_y = product * weighted_diffs_y
         
         second_term = np.stack((second_term_x,second_term_y),axis=2)
 
-        total_term = first_term + second_term
+        total_term = GT_FT_SCALER * first_term + second_term
 
         grads = np.sum(total_term,axis=1)
         #max_weighted_sum = np.min(weighted_sum)
@@ -1366,8 +1380,10 @@ def Coords2ValueFastWS_NEURIPS_DERIVATIVE(all_pixel_coords, trajectory_dictionar
         tfinal = torch.bmm(tjacobians,tgrads)
         final = tfinal.numpy()
 
-
-    return np.squeeze(final)
+    if GT_USEJACOBIAN:
+        np.squeeze(final)
+    else:
+        return grads[:,[1,0]] #
 
 def Coord2Polar(x,y):
     #z= np.random.random((10,2))

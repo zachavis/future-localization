@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>bf1d0411-f2b6-4b3d-ac07-f174c739ecfc</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>EFL-Benchmark.py</StartupFile>
+    <StartupFile>EgoPsirenVisualizer.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -24,6 +24,12 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AlgorithmComparison.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="AlgorithmComparisonOld.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="AutoEncoderBigStreamlined.py">
       <SubType>Code</SubType>
     </Compile>

@@ -132,7 +132,7 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    folder_path = 'S:\\fut_loc\\test\\20150402_grocery\\'#'S:\\synth_marketplace_random2020\\train\\acofre20167850_t38_p18\\' #acofre20167850_t36_p9\\'    #'S:\\fut_loc\\train\\20150401_walk_00\\' #'S:\\fut_loc\\test\\20150402_walk\\'#20150419_ikea #
+    folder_path = 'S:\\fut_loc\\test\\20150402_grocery\\'#'S:\\synth_marketplace_random2020\\train\\acofre20167850_t38_p18\\' #acofre20167850_t36_p9\\'    #'S:\\fut_loc\\train\\20150401_walk_00\\' #'S:\\fut_loc\\test\\20150402_walk\\'#20150419_ikea #       
 
     # load calibration
     print('loading calibration file')
@@ -205,8 +205,8 @@ if __name__ == "__main__":
     vTR = ReadTraj(traj_data_file)
 
 
-    #iFrame = 45
-    for iFrame in range(45,69):
+    initial_offset = 38#15#45
+    for iFrame in range(initial_offset,69):
 
         print("GETTING", iFrame)
         tr = vTR['vTr'][iFrame]
@@ -594,8 +594,8 @@ if __name__ == "__main__":
 
         aspect_ratio = 1# 3/4 #(2*maxT-2*minT)/(maxR-minR)
         ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
-        big_ego_pixel_shape = (ego_pixel_shape[0] * 1, ego_pixel_shape[1]*1)#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
-        small_ego_pixel_shape = (ego_pixel_shape[0] // 2, ego_pixel_shape[1] //2)#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
+        big_ego_pixel_shape = (ego_pixel_shape[0] * 5, ego_pixel_shape[1]*5)#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
+        small_ego_pixel_shape = (ego_pixel_shape[0] // 8, ego_pixel_shape[1] // 8)#(img.shape[0],int(img.shape[0]*aspect_ratio)) # y,x | vert,horz
 
         ego_r2pix = lambda x : RemapRange(x, minR,maxR, 0,                  ego_pixel_shape[0]  )
         ego_t2pix = lambda x : RemapRange(x, minT,maxT, 0,                  ego_pixel_shape[1]  )
@@ -857,15 +857,19 @@ if __name__ == "__main__":
 
             small_pixel_coords_xformed = np.array(DataReader.Polar2Coord(small_pixel_coords_xformed[:,0],small_pixel_coords_xformed[:,1])).T
             
-
-
+        
             test_ws_trajectory = []
             test_pix_trajectory = []
+            test_pix_trajectory_small = []
             for pix in future_trajectory[0]:
                 # print(pix)
                 
                 pix0 = big_ego_t2pix( ego_pix2t(pix[0]) )
                 pix1 = big_ego_r2pix( ego_pix2r(pix[1]) )
+
+                
+                pix0_small = small_ego_t2pix( ego_pix2t(pix[0]) )
+                pix1_small = small_ego_r2pix( ego_pix2r(pix[1]) )
 
                 if (pix0 < 0 or pix0 > big_ego_pixel_shape[1] or pix1 < 0 or pix1 > big_ego_pixel_shape[0]): # outside ego map
                         break
@@ -874,121 +878,251 @@ if __name__ == "__main__":
                 newpoint = ( DataReader.Polar2Coord( big_ego_pix2t(pix0),np.exp(big_ego_pix2r(pix1)) ) )
                 test_ws_trajectory.append( newpoint )
                 test_pix_trajectory.append( (pix0,pix1) )
+                test_pix_trajectory_small.append( (pix0_small, pix1_small))
 
             if len(test_ws_trajectory) < 2:
                 print("trajectory invalid (leaves egomap early)")
                 continue
 
 
-            global_std_dev = 1
-            coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=global_std_dev/2, dstddev= global_std_dev)
+            global_std_dev = .5
+            coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=global_std_dev, dstddev= 1)
 
 
 
 
 
 
-            small_coord_derivative = DataGens.Coords2ValueFastWS_NEURIPS_DERIVATIVE(small_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=global_std_dev/2, dstddev= global_std_dev)
+            small_coord_derivative = DataGens.Coords2ValueFastWS_NEURIPS_DERIVATIVE(small_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=global_std_dev, dstddev= 1)
+
+            trajectory_deriv = DataGens.Coords2ValueFastWS_NEURIPS_DERIVATIVE(np.array(test_ws_trajectory),{0:test_ws_trajectory},None,None,stddev=global_std_dev, dstddev= 1)
 
 
 
 
-            fig, axes = plt.subplots(1,3)#, figsize=(18,6))
-            # axes = [ax] # only use if there's 1 column
 
-            #newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
-            #fig.set_size_inches(16, 24)
-            axes[0].set_title('Traj in image')
-            #axes[0].set_xlim(*newBoundsx)
-            #axes[0].set_ylim(*crowdBoundsY)
-            #axes[0].set_aspect(1)
+            ws_traj = np.array(test_ws_trajectory)
+            maxX = np.max(ws_traj[:,0])+2
+            minX = np.min(ws_traj[:,0])
+            maxY = np.max(ws_traj[:,1])+1
+            minY = np.min(ws_traj[:,1])-1
+
+            #np.linspace(minX,maxX,)
+            #-4,4
+            all_ws_coords = np.array( [ [j+.5,i+.5] for i in np.linspace(-1,7,240) for j in np.linspace(0,60,240) ], dtype=np.float32)
+            all_ws_value = DataGens.Coords2ValueFastWS_NEURIPS(all_ws_coords,{0:test_ws_trajectory},None,None,stddev=global_std_dev, dstddev= 1)
+
+
+            all_ws_coords_small = np.array( [ [j+.5,i+.5] for i in np.linspace(-1,7,24) for j in np.linspace(0,60,24) ], dtype=np.float32)
+            all_ws_derivative = DataGens.Coords2ValueFastWS_NEURIPS_DERIVATIVE(all_ws_coords_small,{0:test_ws_trajectory},None,None,stddev=global_std_dev, dstddev= 1)
+
+
+            #xws, yws = np.meshgrid(, )
+
+            #pixels = np.stack((xws,yws),axis=2)
+
+
+
+            if True:
+                fig, ax = plt.subplots(1,1)
+                axes = [ax]
             
-            axes[0].set_xlim(0,img.shape[1])
-            axes[0].set_ylim(img.shape[0],0)
-            axes[0].set_aspect(1)
-            axes[0].imshow(img)
-            axes[0].plot(tr_ground[0], tr_ground[1], 'b.')
+                #plt.imsave('bigegomap.png',img2)
+                axes[0].set_title('EgoRetinal Map')
+            
+                boundsX = (0,big_ego_pixel_shape[1])
+                boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+                axes[0].set_xlim(*boundsX)
+                axes[0].set_ylim(*boundsY)
+                axes[0].set_aspect(1)
+
+                axes[0].imshow(img2)
+
 
             
-            bigtpix = big_ego_t2pix(t)
-            bigrpix = big_ego_r2pix(logr)
+
+                bigtpix = big_ego_t2pix(t)
+                bigrpix = big_ego_r2pix(logr)
+            
+                #liltpix = ego_t2pix(t)
+                #lilrpix = ego_r2pix(logr)
+
+                plt.plot(bigtpix,bigrpix,'m',linewidth=3)
+
+                plt.show()
+
+
+                fig, ax = plt.subplots(1,1)
+                axes = [ax]
+            
+                #plt.imsave('bigegomap.png',img2)
+                axes[0].set_title('Traj in image')
+                #axes[0].set_xlim(*newBoundsx)
+                #axes[0].set_ylim(*crowdBoundsY)
+                #axes[0].set_aspect(1)
+            
+                axes[0].set_xlim(0,img.shape[1])
+                axes[0].set_ylim(img.shape[0],0)
+                axes[0].set_aspect(1)
+                axes[0].imshow(img)
+                #axes[0].plot(tr_ground[0], tr_ground[1], 'm')
+
+            
+                bigtpix = big_ego_t2pix(t)
+                bigrpix = big_ego_r2pix(logr)
 
                        
-            z, x = Polar2Coord(t,np.exp(logr))
+                z, x = Polar2Coord(t,np.exp(logr))
             
-            coords_3D = np.zeros((len(z),3))
-            coords_3D[:,1] = 0
-            coords_3D[:,0] = x
-            coords_3D[:,2] = z
-            coords_3D = (R_rect_ego.T @ coords_3D.T).T
-            coords_3D -= tr['up'].T
+                coords_3D = np.zeros((len(z),3))
+                coords_3D[:,1] = 0
+                coords_3D[:,0] = x
+                coords_3D[:,2] = z
+                coords_3D = (R_rect_ego.T @ coords_3D.T).T
+                coords_3D -= tr['up'].T
 
-            pixels = K_data @ R_rect @ coords_3D.T
-            pixels /= pixels[2]
+                pixels = K_data @ R_rect @ coords_3D.T
+                pixels /= pixels[2]
 
-            axes[0].plot(pixels[0],pixels[1],'rx')
-        
-            #axes[1].set_title('Traj in EgoMap')
-            #axes[1].set_xlim((-2*np.pi/3, 2*np.pi/3))
+                axes[0].plot(pixels[0],pixels[1],'m',linewidth=3)
+
+                plt.show()
+
+
+
+
+
+
+
+
+            fig, ax = plt.subplots(1,1)#, figsize=(18,6))
+            axes = [ax] # only use if there's 1 column
+
+            ##newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
+            ##fig.set_size_inches(16, 24)
+            #axes[0].set_title('Traj in image')
+            ##axes[0].set_xlim(*newBoundsx)
             ##axes[0].set_ylim(*crowdBoundsY)
+            ##axes[0].set_aspect(1)
+            
+            #axes[0].set_xlim(0,img.shape[1])
+            #axes[0].set_ylim(img.shape[0],0)
+            #axes[0].set_aspect(1)
+            #axes[0].imshow(img)
+            #axes[0].plot(tr_ground[0], tr_ground[1], 'b.')
+
+            
+            #bigtpix = big_ego_t2pix(t)
+            #bigrpix = big_ego_r2pix(logr)
+
+                       
+            #z, x = Polar2Coord(t,np.exp(logr))
+            
+            #coords_3D = np.zeros((len(z),3))
+            #coords_3D[:,1] = 0
+            #coords_3D[:,0] = x
+            #coords_3D[:,2] = z
+            #coords_3D = (R_rect_ego.T @ coords_3D.T).T
+            #coords_3D -= tr['up'].T
+
+            #pixels = K_data @ R_rect @ coords_3D.T
+            #pixels /= pixels[2]
+
+            #axes[0].plot(pixels[0],pixels[1],'rx')
+        
+            ##axes[1].set_title('Traj in EgoMap')
+            ##axes[1].set_xlim((-2*np.pi/3, 2*np.pi/3))
+            ###axes[0].set_ylim(*crowdBoundsY)
+            ##axes[1].set_aspect(1)
+            ###axes[1].imshow(img)
+        
+        
+            ##axes[1].plot(t, logr, 'r')
+        
+            #axes[1].set_title('EgoRetinal Map')
+            
+            #boundsX = (0,big_ego_pixel_shape[1])
+            #boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+            #axes[1].set_xlim(*boundsX)
+            #axes[1].set_ylim(*boundsY)
             #axes[1].set_aspect(1)
-            ##axes[1].imshow(img)
-        
-        
-            #axes[1].plot(t, logr, 'r')
-        
-            axes[1].set_title('EgoRetinal Map')
+
+            #axes[1].imshow(img2)
+
+
             
+
+            #bigtpix = big_ego_t2pix(t)
+            #bigrpix = big_ego_r2pix(logr)
+            
+            #liltpix = ego_t2pix(t)
+            #lilrpix = ego_r2pix(logr)
+            
+            ##print('first ', bigtpix)
+            ##print('second ', bigrpix)
+            ##print('third ', liltpix)
+            ##print('fourth ', lilrpix)
+
+            #axes[1].plot(bigtpix,bigrpix, 'rx')
+
+
+            ##axes[1].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'bo')
+
+
+
+            
+
+
+            
+            #axes[0].set_title('EgoRetinal Ground Truth')
             boundsX = (0,big_ego_pixel_shape[1])
             boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-            
-            axes[1].set_xlim(*boundsX)
-            axes[1].set_ylim(*boundsY)
-            axes[1].set_aspect(1)
-
-            axes[1].imshow(img2)
-            #plt.imsave('bigegomap.png',img2)
-            
-
-            bigtpix = big_ego_t2pix(t)
-            bigrpix = big_ego_r2pix(logr)
-            
-            liltpix = ego_t2pix(t)
-            lilrpix = ego_r2pix(logr)
-            
-            #print('first ', bigtpix)
-            #print('second ', bigrpix)
-            #print('third ', liltpix)
-            #print('fourth ', lilrpix)
-
-            axes[1].plot(bigtpix,bigrpix, 'rx')
-
-
-            #axes[1].plot(big_ego_t2pix(test_t),big_ego_r2pix(test_logr) ,'bo')
-
-
-
-            
-
-
-            
-            axes[2].set_title('EgoRetinal Ground Truth')
-            boundsX = (0,big_ego_pixel_shape[1])
-            boundsY = (0,big_ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-            axes[2].set_xlim(*boundsX)
-            axes[2].set_ylim(*boundsY)
+            #axes[2].set_xlim(*boundsX)
+            #axes[2].set_ylim(*boundsY)
 
             #axes[1].set_xlim(*boundsX)
             #axes[1].set_ylim(*boundsY)
+            #-np.log(-coord_value+1)
+            #tempval = axes[2].imshow(np.reshape(coord_value,(big_ego_pixel_shape)), extent=[*boundsX, *(big_ego_pixel_shape[0],0)], interpolation='none', cmap='viridis')#, cmap='gnuplot')
+            #tempval = axes[2].imshow(np.reshape(all_ws_value,(240,240)), extent=[*boundsX, *(big_ego_pixel_shape[0],0)], interpolation='none', cmap='viridis')#, cmap='gnuplot')
+            
+            all_ws_derivative[:,0] #*=(15/8)
+            all_ws_derivative[:,1] #*=(8/15)
+            coord_mag = np.linalg.norm(all_ws_derivative,axis=1)
+            normalized_derivatives = all_ws_derivative / coord_mag[:,None]/4
 
-            tempval = axes[2].imshow(np.reshape(-np.log(-coord_value+1),(big_ego_pixel_shape)), extent=[*boundsX, *(big_ego_pixel_shape[0],0)], interpolation='none', cmap='viridis')#, cmap='gnuplot')
-        
+            bigenough = normalized_derivatives[:]
+            locations_np = all_ws_coords_small
+            coord_bigenough = locations_np[:]
+
+            #axes[0].axis('off')
+
+            axes[0].tick_params(
+                axis='x',          # changes apply to the x-axis
+                which='both',      # both major and minor ticks are affected
+                bottom=False,      # ticks along the bottom edge are off
+                top=False,         # ticks along the top edge are off
+                labelbottom=False) # labels along the bottom edge are off
+            
+            axes[0].tick_params(
+                axis='y',          # changes apply to the x-axis
+                which='both',      # both major and minor ticks are affected
+                left=False,      # ticks along the bottom edge are off
+                right=False,         # ticks along the top edge are off
+                labelbottom=False) # labels along the bottom edge are off
+
+            #axes[0].set_aspect(60/8)
+            axes[0].plot(ws_traj[:,0],ws_traj[:,1],'m')
+            axes[0].quiver(coord_bigenough[:,0], coord_bigenough[:,1], -normalized_derivatives[:,1]*5,-normalized_derivatives[:,0]*5, color='c', units='xy' ,scale=1)
+            #axes[0].quiver(all_ws_coords_small[:,0], all_ws_coords_small[:,1], -all_ws_derivative[:,1],-all_ws_derivative[:,0], color='c', units='xy' ,scale=1)
         
             trajnp = np.array(test_pix_trajectory)
             #axes[2].plot(trajnp[:,0], trajnp[:,1], 'r')
         
-            cax = fig.add_axes([.3, .95, .4, .05])
-            fig.colorbar(tempval, cax, orientation='horizontal')
+            #cax = fig.add_axes([.3, .95, .4, .05])
+            #fig.colorbar(tempval, cax, orientation='horizontal')
 
 
 
@@ -1028,11 +1162,32 @@ if __name__ == "__main__":
             axes[0].set_ylim(*boundsY)
             axes[0].set_aspect(1)
 
-            normalized_derivatives = small_coord_derivative / np.linalg.norm(small_coord_derivative,axis=1)[:,None]
+            
+            
+            coord_mag = np.linalg.norm(trajectory_deriv,axis=1)
+            normalized_derivatives = trajectory_deriv / coord_mag[:,None]/4
 
+            bigenough = normalized_derivatives[coord_mag > .025]
+            locations_np = np.array(test_pix_trajectory_small)
+            coord_bigenough = locations_np[coord_mag > .025]
+            
+
+            axes[0].quiver(coord_bigenough[:,0], coord_bigenough[:,1], -bigenough[:,0],-bigenough[:,1], color='c', units='xy' ,scale=.25)# minshaft=50,  headwidth=2, headlength=1)
+
+
+
+            coord_mag = np.linalg.norm(small_coord_derivative,axis=1)
+
+            scalar_term = 4
+            normalized_derivatives = small_coord_derivative / coord_mag[:,None]/scalar_term
+
+            bigenough = normalized_derivatives[coord_mag > .1/scalar_term]
+            coord_bigenough = small_pixel_coords[coord_mag > .1/scalar_term]
             #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
 
-            axes[0].quiver(small_pixel_coords[:,0], small_pixel_coords[:,1], -normalized_derivatives[:,0],-normalized_derivatives[:,1], color='red', units='xy' ,scale=1)
+            axes[0].quiver(coord_bigenough[:,0], coord_bigenough[:,1], -bigenough[:,0],-bigenough[:,1], color='red', units='xy' ,scale=.25)# minshaft=50,  headwidth=2, headlength=1)
+
+
 
             axes[1].set_title('EgoRetinal Ground Truth')
             boundsX = (0,big_ego_pixel_shape[1])
@@ -1042,10 +1197,21 @@ if __name__ == "__main__":
 
             #axes[1].set_xlim(*boundsX)
             #axes[1].set_ylim(*boundsY)
+            #-np.log(-coord_value+1)
+            
+            axes[1].axis('off')
+            
+            tempval = axes[1].imshow(np.reshape(coord_value,(big_ego_pixel_shape)), extent=[*boundsX, *(big_ego_pixel_shape[0],0)], interpolation='none', cmap='hot')#, cmap='gnuplot')
+            coord_mag = np.linalg.norm(small_coord_derivative,axis=1)
 
-            tempval = axes[1].imshow(np.reshape(-np.log(-coord_value+1),(big_ego_pixel_shape)), extent=[*boundsX, *(big_ego_pixel_shape[0],0)], interpolation='none', cmap='viridis')#, cmap='gnuplot')
-        
-        
+            scalar_term = 2
+            normalized_derivatives = small_coord_derivative / coord_mag[:,None]/scalar_term
+
+            bigenough = normalized_derivatives[coord_mag > .00/scalar_term]
+            coord_bigenough = small_pixel_coords[coord_mag > .00/scalar_term]
+            #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
+            axes[1].quiver(coord_bigenough[:,0]*8, coord_bigenough[:,1]*8, -bigenough[:,0],-bigenough[:,1], color='blue', units='xy' ,scale=.08)# minshaft=50,  headwidth=2, headlength=1)
+
             trajnp = np.array(test_pix_trajectory)
             #axes[2].plot(trajnp[:,0], trajnp[:,1], 'r')
         
@@ -1063,6 +1229,17 @@ if __name__ == "__main__":
             #figManager.window.showMaximized()
             plt.show()
 
+
+
+
+            
+            
+            #print('first ', bigtpix)
+            #print('second ', bigrpix)
+            #print('third ', liltpix)
+            #print('fourth ', lilrpix)
+
+            #axes[1].plot(bigtpix,bigrpix, 'rx')
 
 
 

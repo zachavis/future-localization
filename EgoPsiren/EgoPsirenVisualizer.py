@@ -41,7 +41,7 @@ if __name__ == "__main__":
     #DNN.current_epoch = 0
 
 
-    LOAD_NETWORK_FROM_DISK = True    
+    LOAD_NETWORK_FROM_DISK = True
     #overfit_ego_map_with_mask_newnewloss
     #overfit_skinny_exp_all_imgs
     #overfit_ego_map_all_imgs
@@ -51,9 +51,27 @@ if __name__ == "__main__":
     #overfit_ego_map_with_mask_newnewloss_square192_55kernel_aligned BAD
     #overfit_imploc_aligned_nogoal_192.pt #192
     #overfit_imploc_aligned_goal_192.pt #192
-    #overfit_synth_marketplace_random2020 synthetic data
-    network = torch.load('overfit_synth_marketplace_random2020.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
-    vae_network = torch.load('overfit_imploc_VAE_192_aligned.pt') #''overfit_test_network_exp_AE.pt
+    # overfit_synth_marketplace_random2020 synthetic data
+    # overfit_imploc_grad_192_miniset_withexp.pt
+    # #overfit_imploc_192_aligned_miniset_multiplier.pt
+    # overfit_imploc_grad_192_miniset_withexp.pt
+    # overfit_imploc_192_aligned_miniset_grad.pt
+    # overfit_imploc_grad_192_miniset_withgoal.pt
+    # synth_marketplace_random2020
+    # overfit_imploc_192_aligned_synth_miniset
+
+
+
+    #FINALS
+    # overfit_imploc_192_full_final.pt
+
+
+    #overfit_imploc_192_full_synthetic_grad.pt
+    
+    #overfit_VAE_192_imageprior_full
+    #overfit_VAE_192_imageprior_full_synth.pt
+    network = torch.load('overfit_imploc_192_full_synthetic_grad.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
+    vae_network = torch.load('overfit_VAE_192_imageprior_full_synth.pt') #''overfit_test_network_exp_AE.pt
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
         network = network.module
@@ -69,9 +87,9 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path = 'S:\\fut_loc\\train\\' #'S:\\synth_marketplace_random2020\\test\\' #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\'
+    partial_folder_path =  'S:\\synth_marketplace_trials2021\\test\\' # #'S:\\fut_loc\\test\\' # #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\' #'S:\\synth_marketplace_random2020\\test\\'
     
-    folder_name = '10000000_test_00' #'marketplace6203_trand_p0' #'20150402_grocery' #'20150418_mall_00' #'20150401_walk_00' #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t38_p18' #
+    folder_name = 'Yasamin9085_t29_p3'# '20150402_grocery' #'20150401_walk_00' #'20150418_mall_00' # #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t36_p9' #'acofre20167850_t38_p18' #'10000000_test_00' #'marketplace6203_trand_p0' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -141,7 +159,7 @@ if __name__ == "__main__":
         princ_y2 = float(data[1])
 
         K_data = np.array([[focal_x, 0, princ_x],[ 0, focal_y, princ_y],[ 0, 0, 1]])
-        R_rect = np.array([[0.9989,0.0040,0.0466],[-0.0040,1.0000,-0.0002],[-0.0466,0,0.9989]])
+        R_rect = np.eye(3) #np.array([[0.9989,0.0040,0.0466],[-0.0040,1.0000,-0.0002],[-0.0466,0,0.9989]])
         #fclose(fid);
 
         fid.close()
@@ -161,16 +179,23 @@ if __name__ == "__main__":
 
                  
         # KNN DATA LOADING
-        knnPickle = open('knn_alexfeats.knn','rb')
+        #knn_alexfeats_aligned_synth
+        #knn_alexfeats_aligned_full_FIXED
+        knnPickle = open('knn_alexfeats_aligned_synth_FIXED.knn','rb')#'knn_alexfeats_aligned.knn','rb')
         KNN = pickle.load(knnPickle)
         knnPickle.close()
 
-        dictPickle = open('knn_traintraj.dict','rb')
+        #knn_traintraj_aligned_synth
+        #knn_traintraj_aligned_full_FIXED
+        dictPickle = open('knn_traintraj_aligned_synth_FIXED.dict','rb')##'knn_traintraj_aligned.dict','rb')
         LOG_POLAR_TRAJECTORY_DICTIONARY_TR = pickle.load(dictPickle)
         LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS = list(LOG_POLAR_TRAJECTORY_DICTIONARY_TR.keys())
+        print(type(LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS[0]))
+        #np.savetxt('keydict.txt', np.array(LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS,dtype=np.int),fmt='%i')
         dictPickle.close()
 
         AlexNet = torch.hub.load('pytorch/vision:v0.9.0', 'alexnet', pretrained=True)
+        AlexNet.eval()
         mods = list(AlexNet.named_modules())
         AlexNet.named_modules()
         children = AlexNet.children()
@@ -204,7 +229,7 @@ if __name__ == "__main__":
 
         
 
-        frameOffset = 0
+        frameOffset = 10#38
         frameEnd = len(os.listdir(folder_path + 'im\\')) #55
         imageScale = .1
 
@@ -432,7 +457,8 @@ if __name__ == "__main__":
                 img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape_AlexNet[0], ego_pixel_shape_AlexNet[1],3)
                 img_channel_swap_AlexNet = np.moveaxis(img_resized,-1,0).astype(np.float32)
 
-
+                #plt.imshow(img_resized)
+                #plt.show()
 
 
 
@@ -655,10 +681,17 @@ if __name__ == "__main__":
             test_image_VAE = img_channel_swap
             test_image_AlexNet = img_channel_swap_AlexNet
 
-            outputs_AlexNet = AlexNet(torch.unsqueeze(torch.from_numpy(test_image_AlexNet),0))
-            feature_AlexNet = activation['classifier.4']
-            dist, idx = KNN.kneighbors(feature_AlexNet)
+            
 
+            #testing = np.arange(256*256*3)
+            #testing = np.reshape(testing,(3,256,256)).astype(np.float32)
+            outputs_AlexNet = AlexNet( torch.unsqueeze(torch.from_numpy(test_image_AlexNet),0))
+            feature_AlexNet = activation['classifier.4']
+            #np.set_printoptions(threshold=sys.maxsize)
+            #print(feature_AlexNet[0].numpy())
+
+            dist, idx = KNN.kneighbors(feature_AlexNet.numpy())
+            best_idx = LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS[idx[0,0]]
             traj_AlexNet = LOG_POLAR_TRAJECTORY_DICTIONARY_TR[LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS[idx[0,0]]] # get best traj
             traj_AlexNet = np.array(traj_AlexNet)
 
@@ -701,7 +734,7 @@ if __name__ == "__main__":
             #coord_value = DataGens.Coords2ValueFast(all_pixel_coords,future_trajectory,nscale=1)
 
             if (PRINT_DEBUG_IMAGES):
-                coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
+                coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5)
                 fig, ax = plt.subplots(1,1)#, figsize=(36,6))
                 axes = [ax]
 
@@ -754,7 +787,7 @@ if __name__ == "__main__":
             all_pixel_coords_xformed[:,1] = np.exp(ego_pix2r(all_pixel_coords[:,1]))
             all_pixel_coords_xformed = np.array(DataReader.Polar2Coord(all_pixel_coords_xformed[:,0],all_pixel_coords_xformed[:,1])).T
 
-            test_coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=4)#.5)
+            test_coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5, dstddev=1)#.5)
 
             test_image_prediction = torch.from_numpy( np.expand_dims(test_image,0) )
             print(test_image_prediction.device)
@@ -829,6 +862,8 @@ if __name__ == "__main__":
 
             #axes[0].imshow(-outImage[0].cpu().view(ego_pixel_shape).detach().numpy(), extent=[*(minT,maxT), *(minR,maxR)], interpolation='none')#, cmap='gnuplot')
             outImagea = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
+
+
 
 
             predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
@@ -962,7 +997,7 @@ if __name__ == "__main__":
             prev_x = -1
             smoothed_min_along_y = min_along_y
             lowest_val = 100
-            tuning_parameter = .7
+            tuning_parameter = .6
             for i in range(ego_pixel_shape[0]):
 
                 
@@ -993,16 +1028,20 @@ if __name__ == "__main__":
                         smoothed_min_along_y[i] = prev_x
                     continue
                 
+                lowerer = np.clip(prev_x-2,0,ego_pixel_shape[1]-1)
                 lower = np.clip(prev_x-1,0,ego_pixel_shape[1]-1)
                 upper = np.clip(prev_x+1,0,ego_pixel_shape[1]-1)
+                upperer = np.clip(prev_x+2,0,ego_pixel_shape[1]-1)
 
-                next_x = np.array([lower,prev_x,upper])
-
+                next_x = np.array([lowerer,lower,prev_x,upper,upperer])
+                
+                leftleft_val = outImagea[y,lowerer]
                 left_val = outImagea[y,lower]
                 center_val = outImagea[y,prev_x]
                 right_val = outImagea[y,upper]
+                rightright_val = outImagea[y,upperer]
 
-                vals = np.array([left_val, center_val, right_val])
+                vals = np.array([leftleft_val,left_val, center_val, right_val,rightright_val])
 
                 lowest_val_pos = np.argmin(vals) #-1 to center
 
@@ -1040,7 +1079,15 @@ if __name__ == "__main__":
 
 
             #axes[1].plot(,,'r',linewidth=2)
-            traj_t_pix = min_along_y[below_thresh==True]
+
+            alpha = 0.5
+            smoothsmooth_min_along_y = np.copy(smoothed_min_along_y[below_thresh==True])
+
+            for i in range(1,len(smoothed_min_along_y[below_thresh==True])):
+                smoothsmooth_min_along_y[i] = smoothsmooth_min_along_y[i-1] * alpha + (1-alpha) * smoothed_min_along_y[below_thresh==True][i-1]
+
+
+            traj_t_pix = smoothsmooth_min_along_y#[below_thresh==True]
             traj_r_pix = y_coords[below_thresh==True]
             
             traj_t = ego_pix2t(traj_t_pix)
@@ -1048,14 +1095,14 @@ if __name__ == "__main__":
 
             traj_r = np.exp(traj_logr)
 
-
+            min_along_y = smoothed_min_along_y = smoothsmooth_min_along_y
 
 
 
 
             load_offset = 1 if LOAD_NETWORK_FROM_DISK else 0
             load_offset += 1 if USE_INTENSITY else 0
-            fig, axes = plt.subplots(1,3 + load_offset)
+            fig, axes = plt.subplots(1,2 + load_offset, gridspec_kw = {'wspace':.05,'width_ratios': [4/3, 1,1,1]})
             fig.suptitle('Comparison of Network Output with Ground Truth')
             trajnp = np.array(test_pix_trajectory)
 
@@ -1090,7 +1137,7 @@ if __name__ == "__main__":
 
                 pixels = K_data @ R_rect @ coords_3D.T
                 pixels /= pixels[2]
-                axes[0].plot(pixels[0], pixels[1], 'r')
+                axes[0].plot(pixels[0], pixels[1], 'c',linewidth=3)
 
 
                 z, x = DataReader.Polar2Coord(traj_AlexNet[:,0], np.exp(traj_AlexNet[:,1]))
@@ -1104,10 +1151,10 @@ if __name__ == "__main__":
 
                 pixels = K_data @ R_rect @ coords_3D.T
                 pixels /= pixels[2]
-                #axes[0].plot(pixels[0], pixels[1], 'c--')
+                axes[0].plot(pixels[0], pixels[1], 'r--')
                 
-                xn,yn = DataGens.InterpAlongLine(pixels[0],pixels[1],25)
-                axes[0].plot(xn,yn,'cx')
+                #xn,yn = DataGens.InterpAlongLine(pixels[0],pixels[1],25)
+                #axes[0].plot(xn,yn,'rx')
 
 
                 
@@ -1124,6 +1171,8 @@ if __name__ == "__main__":
                 pixels /= pixels[2]
                 axes[0].plot(pixels[0], pixels[1], 'w--')
                 
+                axes[0].axes.xaxis.set_visible(False)
+                axes[0].axes.yaxis.set_visible(False)
                 #fx = interp1d(pixels[0], np.arange(len(pixels[0])))
                 #fy = interp1d(pixels[1], np.arange(len(pixels[1])))
                 #ix = np.linspace(0,len(pixels[0]-1),num=25,endpoint=True)
@@ -1144,39 +1193,28 @@ if __name__ == "__main__":
             traj_vae_logrpix = ego_r2pix(traj_vae_logr)
 
                 
-            if USE_INTENSITY:
-                axes[1].set_title('Intensity Mask')
-                axes[1].set_xlim(*boundsX)
-                axes[1].set_ylim(*boundsY)
-                axes[1].set_aspect(1)
-                axes[1].imshow(intensity_map*.9 + .1, cmap='plasma')
-                axes[1].plot(min_along_y[below_thresh==True],y_coords[below_thresh==True],'r',linewidth=2)
-                axes[1].plot(trajnp[:,0], trajnp[:,1], 'm--')
-                axes[1].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-                axes[1].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
-                print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
-                #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
-                #plt.imsave('walkable.png',intensity_map, cmap='plasma')
-                #plt.imsave('egomap.png', np.moveaxis(0.5*(test_image+1),0,-1))
-                #plt.imsave('siren.png', sirenimage, cmap='viridis')
+            
             
 
-            axes[0+load_offset].set_title('Input Image with Mask')#(Unnormalized)')
+            axes[1].set_title('Input Image with Mask')#(Unnormalized)')
             boundsX = (0,ego_pixel_shape[1])
             boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
             
-            axes[0+load_offset].set_xlim(*boundsX)
-            axes[0+load_offset].set_ylim(*boundsY)
-            axes[0+load_offset].set_aspect(1)
-            axes[0+load_offset].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
-            #axes[0+load_offset].imshow(sirenimage, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
-            axes[0+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
-            axes[0+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            axes[0+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
-            axes[0+load_offset].plot(traj_t_pix,traj_r_pix,'r',linewidth=2)
+            axes[1].set_xlim(*boundsX)
+            axes[1].set_ylim(*boundsY)
+            axes[1].set_aspect(1)
+            axes[1].imshow(np.moveaxis(0.5*(test_image+1),0,-1))
+            #axes[0+load_offset].imshow(sirenimage, extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none')
+            axes[1].plot(trajnp[:,0], trajnp[:,1], 'm--')
+            axes[1].plot(tpix_AlexNet, rpix_AlexNet, 'r--')
+            axes[1].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            axes[1].plot(traj_t_pix,traj_r_pix,'r',linewidth=2)
+            axes[1].plot(smoothsmooth_min_along_y,y_coords[below_thresh==True],'c',linewidth=3)
             xn,yn = DataGens.InterpAlongLine(tpix_AlexNet,rpix_AlexNet,25)
-            axes[0+load_offset].plot(xn,yn,'cx')
+            #axes[0+load_offset].plot(xn,yn,'cx')
             
+            axes[1].axes.xaxis.set_visible(False)
+            axes[1].axes.yaxis.set_visible(False)
 
             traj = np.array(test_pix_trajectory).T
             tx, ty = DataGens.InterpAlongLine(traj[0],traj[1],25)
@@ -1206,56 +1244,87 @@ if __name__ == "__main__":
 
 
 
+            #if USE_INTENSITY:
+            #axes[2].set_title('Intensity Mask')
+            axes[2].set_xlim(*boundsX)
+            axes[2].set_ylim(*boundsY)
+                
+            axes[2].axes.xaxis.set_visible(False)
+            axes[2].axes.yaxis.set_visible(False)
+            axes[2].set_aspect(1)
+            axes[2].imshow(intensity_map*.9 + .1, cmap='winter')#vmax = 1.0, vmin = 0.0, 
+            #axes[2].plot(smoothsmooth_min_along_y,y_coords[below_thresh==True],'c',linewidth=2)
+            #axes[2].plot(trajnp[:,0], trajnp[:,1], 'm--')
+            #axes[2].plot(tpix_AlexNet, rpix_AlexNet, 'r--')
+            #axes[2].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
+            #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
+            plt.imsave('walkable.png',intensity_map, cmap='winter')
+            plt.imsave('affordance.png',outImagea, vmax = 0, vmin = -1.0, cmap='hot')
+            #plt.imsave('egomap.png', np.moveaxis(0.5*(test_image+1),0,-1))
+            #plt.imsave('siren.png', sirenimage, cmap='viridis')
+
+
+
+
+
+
 
 
         
-            axes[1+load_offset].set_title('Network Prediction and Traj')
-            axes[1+load_offset].set_xlim(*boundsX)
-            axes[1+load_offset].set_ylim(*boundsY)
-            axes[1+load_offset].set_aspect(1)
+            axes[3].set_title('Network Prediction and Traj')
+            axes[3].set_xlim(*boundsX)
+            axes[3].set_ylim(*boundsY)
+            axes[3].set_aspect(1)
             #combined = - (intensity_map*.9 + .1) * np.maximum(-outImagea,0)
             #print("comb max:", np.max(combined),"comb min:",np.min(combined))
             #(outImagea*10).astype(int).astype(float)/10
-            tempval = axes[1+load_offset].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
-            axes[1+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
-            axes[1+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            axes[1+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            tempval = axes[3].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none',cmap='hot')
+            #axes[3].plot(trajnp[:,0], trajnp[:,1], 'm--')
+            #axes[3].plot(tpix_AlexNet, rpix_AlexNet, 'r--')
+            #axes[3].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
             siren_min = np.unravel_index(np.argmin(outImagea),outImagea.shape)
             #axes[1+load_offset].plot(grad_desc_positions[:,0],grad_desc_positions[:,1],'r')
             #axes[1+load_offset].plot(siren_min[1],siren_min[0],'cx',markersize=4)
             #axes[1+load_offset].plot(grad_desc_positions[-1,0],grad_desc_positions[-1,1],'rx',markersize=4)
-            axes[1+load_offset].plot(min_along_y[below_thresh==True],y_coords[below_thresh==True],'r',linewidth=2)
+            #axes[3].plot(smoothsmooth_min_along_y,y_coords[below_thresh==True],'c',linewidth=2)
             #axes[1+load_offset].plot(min_along_y[below_thresh==True][-1],y_coords[below_thresh==True][-1],'cx',markersize=4)
             #axes[1+load_offset].plot(min_along_y[below_thresh==False],y_coords[below_thresh==False],'bx',markersize=4)
+            
+            axes[3].axes.xaxis.set_visible(False)
+            axes[3].axes.yaxis.set_visible(False)
 
             
             cax = fig.add_axes([.3, .95, .4, .05])
             fig.colorbar(tempval, cax, orientation='horizontal')
 
     
-            axes[2+load_offset].set_title('GT Value with GT Traj')
-            axes[2+load_offset].set_xlim(*boundsX)
-            axes[2+load_offset].set_ylim(*boundsY)
-            axes[2+load_offset].set_aspect(1)
-            axes[2+load_offset].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')
-            print('avg gt:',np.mean(np.reshape(test_coord_value,(ego_pixel_shape))))
-            axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
-            axes[2+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
-            axes[2+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
+            #axes[2+load_offset].set_title('GT Value with GT Traj')
+            #axes[2+load_offset].set_xlim(*boundsX)
+            #axes[2+load_offset].set_ylim(*boundsY)
+            #axes[2+load_offset].set_aspect(1)
+            #axes[2+load_offset].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none')
+            #print('avg gt:',np.mean(np.reshape(test_coord_value,(ego_pixel_shape))))
+            #axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
+            #axes[2+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')
+            #axes[2+load_offset].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
 
-            #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
+            #axes[2+load_offset].axes.xaxis.set_visible(False)
+            #axes[2+load_offset].axes.yaxis.set_visible(False)
 
-            #ax.quiver(gradient_samples[0][:,0], gradient_samples[0][:,1], gradient_samples[1][:,0],gradient_samples[1][:,1], color='red', scale_units='xy', scale=1)#, units='xy' ,scale=1
+            ##coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
 
-            #ux = vx/np.sqrt(vx**2+vy**2)
-            #uy = vy/np.sqrt(vx**2+vy**2)
+            ##ax.quiver(gradient_samples[0][:,0], gradient_samples[0][:,1], gradient_samples[1][:,0],gradient_samples[1][:,1], color='red', scale_units='xy', scale=1)#, units='xy' ,scale=1
+
+            ##ux = vx/np.sqrt(vx**2+vy**2)
+            ##uy = vy/np.sqrt(vx**2+vy**2)
         
-            #for traj in test_pix_trajectory.values():
+            ##for traj in test_pix_trajectory.values():
 
-            #plt.show()
-            #mydpi = 300
-            #fig.set_dpi(mydpi)
-            #fig.set_size_inches(1920/mydpi, 1080/mydpi)
+            ##plt.show()
+            ##mydpi = 300
+            ##fig.set_dpi(mydpi)
+            ##fig.set_size_inches(1920/mydpi, 1080/mydpi)
 
 
 

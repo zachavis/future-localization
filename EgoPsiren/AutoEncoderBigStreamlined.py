@@ -915,7 +915,7 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
         #loss_function = nn.MSELoss()
         #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
-        testModel = DNN.ConvolutionalAutoEncoderToPath(in_features=3,path_length=25,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        testModel = DNN.ConvolutionalAutoEncoderToPath2(in_features=3,path_length=25,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
         
         #DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
         testModel.cuda()

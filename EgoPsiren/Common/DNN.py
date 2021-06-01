@@ -1009,6 +1009,73 @@ class ConvolutionalAutoEncoderToPath(nn.Module):
 
 
 
+class ConvolutionalAutoEncoderToPath2(nn.Module):
+    def __init__(self, in_features, path_length, image_resolution=None, partial_conv=False):
+        super().__init__()
+        self.latent_dim = 64
+        out_features = 2 * path_length
+
+        if partial_conv:
+            self.encoder = PartialConvImgEncoder(channel=in_features, image_resolution=image_resolution)
+        else:
+            self.encoder = ConvImgEncoder(channel=in_features, image_resolution=image_resolution, latent_dimension = self.latent_dim*2)
+
+            
+        if partial_conv:
+            self.mid_encoder = PartialConvImgEncoder(channel=in_features, image_resolution=image_resolution)
+        else:
+            self.mid_encoder = ConvImgEncoder(channel=in_features, image_resolution=image_resolution, latent_dimension = self.latent_dim)
+        
+        self.decoder =  FCBlock(in_features=self.latent_dim*2, out_features=out_features, num_hidden_layers=3,hidden_features=256,outermost_linear=True,nonlinearity='relu')  #Siren(in_features=2, out_features=out_features, #modules.SingleBVPNet(out_features=out_features, type='sine', sidelength=image_resolution, in_features=2)
+        
+        #self.hyper_net = HyperNetwork(hyper_in_features=latent_dim, hyper_hidden_layers=1, hyper_hidden_features=256,
+        #                              hypo_module=self.hypo_net)
+
+        #self.multiplier_net = ConvImgIntensity(channel=in_features, image_resolution=image_resolution, latent_dimension = latent_dim)
+
+
+
+        print(self)
+
+    def reparameterize(self, mu, logVar):
+        std=torch.exp(logVar/2)
+        eps=torch.randn_like(std)
+        return mu + std * eps
+
+
+    def forward(self, model_input):
+        if model_input.get('embedding', None) is None:
+            embedding = self.encoder(model_input['img_sparse']) # 128 dimensional
+        else:
+            embedding = model_input['embedding']
+
+
+        
+        if model_input.get('embedding', None) is None:
+            mid_embedding = self.mid_encoder(model_input['img_sparse'])
+        else:
+            mid_embedding = model_input['embedding']
+        #hypo_params = self.hyper_net(embedding)
+
+        mu = embedding[:,:self.latent_dim] # 64 dimensional
+        
+        logVar = embedding[:,self.latent_dim:]
+
+        z = self.reparameterize(mu,logVar)
+        #z = mu
+
+        z_hat = torch.hstack((z,mid_embedding))
+
+        model_output = self.decoder(z_hat)
+        #model_output = torch.reshape(model_output,(model_output.shape[0],2,-1))
+
+
+        return {'model_in': model_input, 'model_out':model_output, 'latent_vec': embedding,
+                'mu': mu, 'logVar': logVar, 'sample':z}
+
+
+
+
 def train2(network,  data_generators, loss_functions, optimizer, epoch):
   network.train() #updates any network layers that behave differently in training and execution 
   avg_loss = 0
@@ -1457,26 +1524,45 @@ def value_mse_NEURIPS(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192
     batch_size = model_outputs_dict['model_out'].shape[0]
     #prediction = torch.reshape(model_outputs_dict['model_out'],(batch_size,1,dim[0],dim[1]))
     sirenimg = torch.reshape(model_outputs_dict['siren_out'],(batch_size,1,dim[0],dim[1]))
+    minval = torch.min(sirenimg)
     #resultA = model_outputs_dict['model_out'].get_device()
     #resultB = prediction.get_device()
-    pred_goals = RemapRange(SoftArgmax2D(window_fn="Parzen")(-sirenimg),0,upper_end,-1,1)
+    #pred_goals = RemapRange(SoftArgmax2D(window_fn="Parzen")(-sirenimg),0,upper_end,-1,1)
     goals = torch.unsqueeze(gt_value_dict['goal'],1)
+
+    #goals_neur = int(gt_value_dict['goal'])
+    
+    #goal_x = sirenimg[:,:,goals.astype(),:]
+    #goal_y = sirenimg[:,:,:,int(goals)]
+    
+    thingA = torch.index_select(sirenimg,2,gt_value_dict['goal'][:,0].long())
+    min_value = torch.index_select(thingA,3,gt_value_dict['goal'][:,1].long())
+    #goal
+
+    #second_ = torch.min(first_,0)
+
+    goallossresult = torch.nn.ReLU()(-(sirenimg - min_value))
+    goal_avg_batch = torch.sum(goallossresult,dim=[1,2,3])
+    goal_loss = torch.mean(goal_avg_batch)
+    
 
 
     # multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
     #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
-    goal_loss = torch.nn.MSELoss()(pred_goals,goals)
+    #goal_loss = torch.nn.MSELoss()(pred_goals,goals)
     #implicit_field_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'], gt_value_dict['field'] )
 
     implicit_gradient_loss = torch.nn.MSELoss()( gradient(model_outputs_dict['dsiren_out'], model_outputs_dict['dsiren_in'] ), gt_value_dict['gradient']) # on siren
     
     implicit_field_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'], gt_value_dict['field'] ) # on multiplication
 
-    loss = 0.1 * implicit_gradient_loss + implicit_field_loss + 0.1 * goal_loss + regularizer #+ implicit_field_loss + implicit_gradient_loss + regularizer
+    loss = 0.1 * implicit_gradient_loss + implicit_field_loss + 0.0 * goal_loss + regularizer #+ implicit_field_loss + implicit_gradient_loss + regularizer
 
 
     #print("\tintensity loss:", regularizer.item())
-    #print("\tgoal loss:", goal_loss.item())
+    print("\tgoal loss:", goal_loss.item())
+    print("\tmin val:", minval.item())
+    print("\tmin val:", min_value.item())
     #print("\timplicit field loss:", implicit_field_loss.item())
     #print("")
     return loss
