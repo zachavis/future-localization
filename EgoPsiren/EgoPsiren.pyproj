@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>bf1d0411-f2b6-4b3d-ac07-f174c739ecfc</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>EgoPsirenVisualizer.py</StartupFile>
+    <StartupFile>point_cloud_visualizer.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -56,6 +56,12 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="EgoPsirenVisualizer.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="fair_baseline.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="pcv_backup.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="point_cloud_visualizer.py">

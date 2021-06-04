@@ -1,109 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2 
-import random
-import copy 
 
-#import pyransac3d as pyrsc
+import pyransac3d as pyrsc
+
 
 #point_cloud = np.loadtxt('S:\\structure.txt')
 #print(point_cloud[:10])
 
 
 data_file = 'S:\\structure_0001800_00.txt' #'S:\\fut_loc\\20150401_walk_00\\traj_prediction.txt'
-
-
-
-
-
-
-
-class Plane:
-    """ 
-    Implementation of planar RANSAC.
-    Class for Plane object, which finds the equation of a infinite plane using RANSAC algorithim. 
-    Call `fit(.)` to randomly take 3 points of pointcloud to verify inliers based on a threshold.
-    ![Plane](https://raw.githubusercontent.com/leomariga/pyRANSAC-3D/master/doc/plano.gif "Plane")
-    ---
-    """
-
-    def __init__(self):
-        self.inliers = []
-        self.equation = []
-
-
-
-    def fit(self, pts, thresh=0.05, minPoints=100, maxIteration=1000, normal_prior=None, max_angle_deflection=np.pi/6.0):
-        """ 
-        Find the best equation for a plane.
-        :param pts: 3D point cloud as a `np.array (N,3)`.
-        :param thresh: Threshold distance from the plane which is considered inlier.
-        :param maxIteration: Number of maximum iteration which RANSAC will loop over.
-        :returns:
-        - `self.equation`:  Parameters of the plane using Ax+By+Cy+D `np.array (1, 4)`
-        - `self.inliers`: points from the dataset considered inliers
-        ---
-        """
-        n_points = pts.shape[0]
-        best_eq = []
-        best_inliers = []
-
-        for it in range(maxIteration):
-
-            # Samples 3 random points 
-            id_samples = random.sample(range(1, n_points-1), 3)
-            pt_samples = pts[id_samples]
-
-            # We have to find the plane equation described by those 3 points
-            # We find first 2 vectors that are part of this plane
-            # A = pt2 - pt1
-            # B = pt3 - pt1
-
-            vecA = pt_samples[1,:] - pt_samples[0,:]
-            vecB = pt_samples[2,:] - pt_samples[0,:]
-
-            # Now we compute the cross product of vecA and vecB to get vecC which is normal to the plane
-            vecC = np.cross(vecA, vecB)
-            
-
-            # The plane equation will be vecC[0]*x + vecC[1]*y + vecC[0]*z = -k
-            # We have to use a point to find k
-            vecC = vecC / np.linalg.norm(vecC)
-
-            
-            ### But first, let's see if there's a prior to satisfy
-            if normal_prior is not None:
-                result = vecC @ normal_prior
-                deflection = np.arccos(result) # Assuming both are normal
-                if deflection > max_angle_deflection:
-                    continue
-
-            # Continuing where we left off...
-            k = -np.sum(np.multiply(vecC, pt_samples[1,:]))
-            plane_eq = [vecC[0], vecC[1], vecC[2], k]
-
-            # Distance from a point to a plane 
-            # https://mathworld.wolfram.com/Point-PlaneDistance.html
-            pt_id_inliers = [] # list of inliers ids
-            dist_pt = (plane_eq[0]*pts[:,0]+plane_eq[1]*pts[:, 1]+plane_eq[2]*pts[:, 2]+plane_eq[3])/np.sqrt(plane_eq[0]**2+plane_eq[1]**2+plane_eq[2]**2)
-            
-            # Select indexes where distance is biggers than the threshold
-            pt_id_inliers = np.where(np.abs(dist_pt) <= thresh)[0]
-            if(len(pt_id_inliers) > len(best_inliers)):
-                best_eq = plane_eq
-                best_inliers = pt_id_inliers
-            self.inliers = best_inliers
-            self.equation = best_eq
-
-        return self.equation, self.inliers
-
-
-
-
-
-
-
-
 
 #vtR = {}
 def ReadPointCloud(data_filename):
@@ -354,8 +260,7 @@ def Distort(x,omega,K):
 
 
 if True:
-    
-    USE_MEAN_DOWN = True
+
     #file_path = 'S:\\ego4d_benchmark\\marcia\\10800524\\REC00003'
     #frame_offset = 1000
     #start_frame = 1100
@@ -370,24 +275,21 @@ if True:
     #frame_offset = 6200
     #start_frame = 6300
     #downscaler = .6
-    #rightscaler = 0.2
-    #forwardscaler = -0.1
-    #n_frames = 100
 
-    file_path = 'S:\\ego4d_benchmark\\meghan\\11500510\\REC00002'
-    #frame_offset = 22600
-    #start_frame = 22609
-    #downscaler = 1.1
-    #rightscaler = -.35
-    #forwardscaler = 0.0
-    #n_frames = 100
-    frame_offset = 20200
-    start_frame = 20200
-    downscaler = 5.0
-    rightscaler = 0.0 #-.35
-    forwardscaler = 0.1
+    #file_path = 'S:\\ego4d_benchmark\\meghan\\11500510\\REC00002'
+    ##frame_offset = 22600
+    ##start_frame = 22609
+    ##downscaler = 1.1
+    ##rightscaler = -.35
+    ##forwardscaler = 0.0
+    ##n_frames = 100
+    #frame_offset = 20200
+    #start_frame = 20200
+    #downscaler = 5.0
+    #rightscaler = 0.0 #-.35
+    #forwardscaler = 0.1
     
-    n_frames = 200
+    #n_frames = 200
 
     #frame_offset = 8200
     #start_frame = 8200
@@ -416,17 +318,15 @@ if True:
     #forwardscaler = 1.2
     
     #n_frames = 100
-
-
     
-    #file_path = 'S:\\ego4d_benchmark\\anna\\10600609\\REC00003'
-    #frame_offset = 2400
-    #start_frame = 2460
-    #downscaler = 2.3
-    #rightscaler = 0.4
-    #forwardscaler = 0.4
+    file_path = 'S:\\ego4d_benchmark\\anna\\10600609\\REC00003'
+    frame_offset = 2400
+    start_frame = 2460
+    downscaler = 2.3
+    rightscaler = 0.4
+    forwardscaler = 0.4
     
-    #n_frames = 180
+    n_frames = 180
 
 
 
@@ -583,6 +483,7 @@ if True:
             mean_down += thisdown
         mean_down /= np.linalg.norm(mean_down)
         
+        USE_MEAN_DOWN = False
         if USE_MEAN_DOWN:
             world_down = mean_down
         else:
@@ -661,10 +562,11 @@ if True:
         camdot = forward @ X_
         camdot_below = world_down @ X_
 
+        PlaneSeg = pyrsc.Plane()
+        best_eq, best_inliers = PlaneSeg.fit(X_.T, 0.1)
 
-
-
-
+        inliers_logical = np.zeros(X_.shape[1], dtype=bool)
+        inliers_logical[best_inliers]=True
         
         infront_logical = np.zeros(X_.shape[1], dtype=bool)
         infront_logical[camdot>=0]=True
@@ -675,37 +577,16 @@ if True:
         #below_logical = np.zeros(X_.shape[1], dtype=bool)
         #below_logical[X_[1] >= cameraCenter[1]]=True
         
-        #just_else = np.logical_and(np.invert(inliers_logical), infront_logical)
+        just_plane = np.logical_and(inliers_logical, infront_logical)
+        just_else = np.logical_and(np.invert(inliers_logical), infront_logical)
         just_below = np.logical_and(below_logical, infront_logical)
-
-
-        X_ = X_[:,just_below]
-
-        PlaneSeg = Plane()
-        best_eq, best_inliers = PlaneSeg.fit(X_.T, 0.5,20,1000,world_down, np.pi/12.0)
-
-        inliers_logical = np.zeros(X_.shape[1], dtype=bool)
-        inliers_logical[best_inliers]=True
-
-        #just_plane = np.logical_and(inliers_logical, just_below)
-
 
         #X_ = X_[:,camdot>=0] # only in front of camera
         #Xstar = X[:,camdot>=0]
         augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
         P = calib['K'] @ cameraRotation #@ augC
         #augX_ = np.concatenate( ( X_, np.ones((1,X_.shape[1])) ), axis=0)
-
-        #x = P @ X_
-        X_ = cameraRotation @ X_ # Align into camera space where 
-
-
-
-
-
-
-        x = calib['K'] @ X_
-        
+        x = P @ X_
         x /= x[2]
         x = x[:2]
         x_dis_struct = Distort(x,calib['omega'],calib['K'])
@@ -747,15 +628,11 @@ if True:
         #ys = pix_front[:,1]
         #xs = pix_front[:,0]
         #axes[0].plot(x_dis_struct[0], x_dis_struct[1], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
-
-        axes[0].plot(x_dis_struct[0], x_dis_struct[1], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
-        #axes[0].plot(x_dis_struct[0,just_else], x_dis_struct[1,just_else], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
-        axes[0].plot(x_dis_struct[0,best_inliers], x_dis_struct[1,best_inliers], 'gx', alpha=.9, markersize = 2.0)#, markersize = 2.0)
-        #axes[0].plot(x_dis_struct[0,just_below], x_dis_struct[1,just_below], 'gx', alpha=.9, markersize = 1.0)#, markersize = 2.0)
-       
-       
-        #axes[0].plot(x_dis[0], x_dis[1], 'b')#, markersize = 2.0)
-        #axes[0].plot(x_dis[0], x_dis[1], 'co', markersize = 2.0)
+        axes[0].plot(x_dis_struct[0,just_else], x_dis_struct[1,just_else], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
+        axes[0].plot(x_dis_struct[0,just_plane], x_dis_struct[1,just_plane], 'cx', alpha=.9, markersize = 2.0)#, markersize = 2.0)
+        axes[0].plot(x_dis_struct[0,just_below], x_dis_struct[1,just_below], 'gx', alpha=.9, markersize = 1.0)#, markersize = 2.0)
+        axes[0].plot(x_dis[0], x_dis[1], 'b')#, markersize = 2.0)
+        axes[0].plot(x_dis[0], x_dis[1], 'co', markersize = 2.0)
 
         plt.show()
 

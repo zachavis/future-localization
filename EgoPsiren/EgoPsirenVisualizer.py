@@ -70,8 +70,15 @@ if __name__ == "__main__":
     
     #overfit_VAE_192_imageprior_full
     #overfit_VAE_192_imageprior_full_synth.pt
-    network = torch.load('overfit_imploc_192_full_synthetic_grad.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
-    vae_network = torch.load('overfit_VAE_192_imageprior_full_synth.pt') #''overfit_test_network_exp_AE.pt
+
+    #SynthSet
+
+    #overfit_imploc_192_full_synthetic_grad
+    #overfit_VAE_192_imageprior_full_synth
+
+
+    network = torch.load('overfit_imploc_192_full_final_grad.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
+    vae_network = torch.load('overfit_VAE_192_imageprior_full.pt') #''overfit_test_network_exp_AE.pt
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
         network = network.module
@@ -87,9 +94,9 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path =  'S:\\synth_marketplace_trials2021\\test\\' # #'S:\\fut_loc\\test\\' # #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\' #'S:\\synth_marketplace_random2020\\test\\'
+    partial_folder_path =  'S:\\fut_loc\\test\\' #'S:\\synth_marketplace_trials2021\\test\\' # # #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\' #'S:\\synth_marketplace_random2020\\test\\'
     
-    folder_name = 'Yasamin9085_t29_p3'# '20150402_grocery' #'20150401_walk_00' #'20150418_mall_00' # #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t36_p9' #'acofre20167850_t38_p18' #'10000000_test_00' #'marketplace6203_trand_p0' #
+    folder_name = '20150418_costco' #'Yasamin9085_t29_p3'# '20150402_grocery' #'20150401_walk_00' #'20150418_mall_00' # #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t36_p9' #'acofre20167850_t38_p18' #'10000000_test_00' #'marketplace6203_trand_p0' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -181,13 +188,13 @@ if __name__ == "__main__":
         # KNN DATA LOADING
         #knn_alexfeats_aligned_synth
         #knn_alexfeats_aligned_full_FIXED
-        knnPickle = open('knn_alexfeats_aligned_synth_FIXED.knn','rb')#'knn_alexfeats_aligned.knn','rb')
+        knnPickle = open('knn_alexfeats_aligned_full_FIXED.knn','rb')#'knn_alexfeats_aligned.knn','rb')
         KNN = pickle.load(knnPickle)
         knnPickle.close()
 
         #knn_traintraj_aligned_synth
         #knn_traintraj_aligned_full_FIXED
-        dictPickle = open('knn_traintraj_aligned_synth_FIXED.dict','rb')##'knn_traintraj_aligned.dict','rb')
+        dictPickle = open('knn_traintraj_aligned_full_FIXED.dict','rb')##'knn_traintraj_aligned.dict','rb')
         LOG_POLAR_TRAJECTORY_DICTIONARY_TR = pickle.load(dictPickle)
         LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS = list(LOG_POLAR_TRAJECTORY_DICTIONARY_TR.keys())
         print(type(LOG_POLAR_TRAJECTORY_DICTIONARY_TR_KEYS[0]))
@@ -229,7 +236,7 @@ if __name__ == "__main__":
 
         
 
-        frameOffset = 10#38
+        frameOffset = 35#38
         frameEnd = len(os.listdir(folder_path + 'im\\')) #55
         imageScale = .1
 
