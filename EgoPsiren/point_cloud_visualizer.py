@@ -74,6 +74,8 @@ class Plane:
             ### But first, let's see if there's a prior to satisfy
             if normal_prior is not None:
                 result = vecC @ normal_prior
+                if result < 0:
+                    vecC *= -1 # flip to same side of plane as normal prior
                 deflection = np.arccos(result) # Assuming both are normal
                 if deflection > max_angle_deflection:
                     continue
@@ -389,13 +391,13 @@ if True:
     
     n_frames = 200
 
-    #frame_offset = 8200
-    #start_frame = 8200
-    #downscaler = 0.5
-    #rightscaler = -.1
-    #forwardscaler = 0.1
+    frame_offset = 8200
+    start_frame = 8200
+    downscaler = 0.5
+    rightscaler = -.1
+    forwardscaler = 0.1
     
-    #n_frames = 200
+    n_frames = 200
 
 
 
@@ -592,46 +594,46 @@ if True:
         down = cameraRotation[1]
         forward = cameraRotation[2]
 
-        points = np.zeros((len(valid_frames[1:]),3))
-        points[:,0] = forward[0]-down[0]*.5 #0#np.linspace(-5,5,len(points))
-        points[:,1] = forward[1]-down[1]*.5 #0 #np.linspace(0,5,len(points))
-        points[:,2] = forward[2]-down[2]*.5 #1 #np.linspace(1,6,len(points))
+        #points = np.zeros((len(valid_frames[1:]),3))
+        #points[:,0] = forward[0]-down[0]*.5 #0#np.linspace(-5,5,len(points))
+        #points[:,1] = forward[1]-down[1]*.5 #0 #np.linspace(0,5,len(points))
+        #points[:,2] = forward[2]-down[2]*.5 #1 #np.linspace(1,6,len(points))
 
-        for i in range(len(valid_frames[1:])):
-            delta = 1.0/len(valid_frames[1:])
-            points[i,0] += right[0] * (i*delta) - (1-i*delta) * right[0]
-            points[i,1] += right[1] * (i*delta) - (1-i*delta) * right[1]
-            points[i,2] += right[1] * (i*delta) - (1-i*delta) * right[2]
-
-
-        #points *= 1
-        #points = (forward + cameraCenter)[None] * points
-        #points += np.ones(points.shape)*cameraCenter[None]
-        points[1] = .7
+        #for i in range(len(valid_frames[1:])):
+        #    delta = 1.0/len(valid_frames[1:])
+        #    points[i,0] += right[0] * (i*delta) - (1-i*delta) * right[0]
+        #    points[i,1] += right[1] * (i*delta) - (1-i*delta) * right[1]
+        #    points[i,2] += right[1] * (i*delta) - (1-i*delta) * right[2]
 
 
-        count = 0
-        for key in valid_frames[1:]:
-            print('Frame:',key)
-            points[count] = frames[key]['C']
-            count += 1
-
-        points +=  np.ones(points.shape)*downscaler*down[None] + np.ones(points.shape)*rightscaler*right[None] + np.ones(points.shape)*forwardscaler*forward[None]
+        ##points *= 1
+        ##points = (forward + cameraCenter)[None] * points
+        ##points += np.ones(points.shape)*cameraCenter[None]
+        #points[1] = .7
 
 
-        X = points.T
-        bigC = np.ones((3,X.shape[1]))
-        bigC = cameraCenter[:,None] * bigC
-        X_ = X-bigC
-        camdot = forward @ X_
-        X_ = X_[:,camdot>=0] # only in front of camera
-        augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
-        P = calib['K'] @ cameraRotation #@ augC
-        #augX_ = np.concatenate( ( X_, np.ones((1,X_.shape[1])) ), axis=0)
-        x = P @ X_
-        x /= x[2]
-        x = x[:2]
-        x_dis = Distort(x,calib['omega'],calib['K'])
+        #count = 0
+        #for key in valid_frames[1:]:
+        #    print('Frame:',key)
+        #    points[count] = frames[key]['C']
+        #    count += 1
+
+        #points +=  np.ones(points.shape)*downscaler*down[None] + np.ones(points.shape)*rightscaler*right[None] + np.ones(points.shape)*forwardscaler*forward[None]
+
+
+        #X = points.T
+        #bigC = np.ones((3,X.shape[1]))
+        #bigC = cameraCenter[:,None] * bigC
+        #X_ = X-bigC
+        #camdot = forward @ X_
+        #X_ = X_[:,camdot>=0] # only in front of camera
+        #augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
+        #P = calib['K'] @ cameraRotation #@ augC
+        ##augX_ = np.concatenate( ( X_, np.ones((1,X_.shape[1])) ), axis=0)
+        #x = P @ X_
+        #x /= x[2]
+        #x = x[:2]
+        #x_dis = Distort(x,calib['omega'],calib['K'])
 
 
         point_cloud = ReadPointCloud(file_path + reconstruction_folder+'\\structure.txt')
@@ -682,7 +684,7 @@ if True:
         X_ = X_[:,just_below]
 
         PlaneSeg = Plane()
-        best_eq, best_inliers = PlaneSeg.fit(X_.T, 0.5,20,1000,world_down, np.pi/12.0)
+        best_eq, best_inliers = PlaneSeg.fit(X_.T, 0.5,20,1000,-world_down, np.pi/12.0)
 
         inliers_logical = np.zeros(X_.shape[1], dtype=bool)
         inliers_logical[best_inliers]=True
@@ -709,6 +711,55 @@ if True:
         x /= x[2]
         x = x[:2]
         x_dis_struct = Distort(x,calib['omega'],calib['K'])
+
+
+        __AVERAGE_HUMAN_HEIGHT = 1.71 # meters
+        # Modify trajectory points
+
+        plane_normal = np.array(best_eq[:3])
+        # since plane is calculated in camera-centered space, we only need d/sqrt(a,b,c)
+        current_distance_to_ground = np.abs(best_eq[3] / np.linalg.norm(plane_normal))
+        corrective_scalar = __AVERAGE_HUMAN_HEIGHT / current_distance_to_ground
+        plane_normal_with_metric = plane_normal * __AVERAGE_HUMAN_HEIGHT / np.linalg.norm(plane_normal)
+        check = np.linalg.norm(plane_normal_with_metric)
+
+
+        
+        points = np.zeros((len(valid_frames[1:]),3))
+        count = 0
+        for key in valid_frames[1:]:
+            print('Frame:',key)
+            points[count] = frames[key]['C']
+            count += 1
+
+        #points +=  np.ones(points.shape)*downscaler*down[None] + np.ones(points.shape)*rightscaler*right[None] + np.ones(points.shape)*forwardscaler*forward[None]
+
+
+
+        X = points.T
+        bigC = np.ones((3,X.shape[1]))
+        bigC = cameraCenter[:,None] * bigC
+        X_ = X-bigC
+
+
+        
+        # RESCALE TRAJECTORY HERE
+        X_ *= corrective_scalar
+        X_ = X_ - plane_normal_with_metric[:,None]
+        
+        camdot = forward @ X_
+        X_ = X_[:,camdot>=0] # only in front of camera
+
+        augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
+        P = calib['K'] @ cameraRotation #@ augC
+        #augX_ = np.concatenate( ( X_, np.ones((1,X_.shape[1])) ), axis=0)
+        x = P @ X_
+        x /= x[2]
+        x = x[:2]
+        x_dis = Distort(x,calib['omega'],calib['K'])
+
+
+
 
 
 
@@ -754,8 +805,8 @@ if True:
         #axes[0].plot(x_dis_struct[0,just_below], x_dis_struct[1,just_below], 'gx', alpha=.9, markersize = 1.0)#, markersize = 2.0)
        
        
-        #axes[0].plot(x_dis[0], x_dis[1], 'b')#, markersize = 2.0)
-        #axes[0].plot(x_dis[0], x_dis[1], 'co', markersize = 2.0)
+        axes[0].plot(x_dis[0], x_dis[1], 'b')#, markersize = 2.0)
+        axes[0].plot(x_dis[0], x_dis[1], 'co', markersize = 2.0)
 
         plt.show()
 
@@ -781,6 +832,7 @@ else:
     ax.scatter(point_cloud['XYZ'][0,logical_clip], point_cloud['XYZ'][1,logical_clip], point_cloud['XYZ'][2,logical_clip], c = point_cloud['RGB'][:,logical_clip].T/255, s=1)
     plt.show()
 
+    print("dummy break")
 
 
 
