@@ -862,7 +862,7 @@ if __name__ == "__main__":
         learning_rate = 5e-5#1e-5
         #loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()
         #loss_function2 = DNN.laplacian_mse_with_coords
-        loss_function3 = DNN.value_mse_NEURIPS_with_coords #DNN.value_mse_with_coords
+        loss_function3 = DNN.value_mse_DoubleSiren_with_coords #DNN.value_mse_with_coords
         
 
         #trajectory_training_dataset = trajectory_data_set
@@ -918,7 +918,10 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
         #loss_function = nn.MSELoss()
         #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
-        testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        testModel = DNN.ConvolutionalNeuralProcessImplicit2D_DoubleHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        
+        
         testModel.cuda()
         testModel.eval()
         #testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,*img_channel_swap.shape)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})

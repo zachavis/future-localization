@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>bf1d0411-f2b6-4b3d-ac07-f174c739ecfc</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>fair_baseline.py</StartupFile>
+    <StartupFile>EgoPsirenVisualizer.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>

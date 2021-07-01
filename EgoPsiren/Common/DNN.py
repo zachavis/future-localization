@@ -957,6 +957,79 @@ class ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(nn.Module):
 
 
 
+class ConvolutionalNeuralProcessImplicit2D_DoubleHypernetWithMultiplier(nn.Module):
+    def __init__(self, in_features, out_features, image_resolution=None, partial_conv=False):
+        super().__init__()
+        latent_dim = LATENT_DIMENSION
+
+        if partial_conv:
+            self.encoder = PartialConvImgEncoder(channel=in_features, image_resolution=image_resolution)
+        else:
+            self.encoder = ConvImgEncoder(channel=in_features, image_resolution=image_resolution, latent_dimension = latent_dim)
+        
+        self.hypo_net = SirenMM(in_features=2,out_features=out_features,num_hidden_layers=3,hidden_features=32,outermost_linear=True,nonlinearity='sine')  #Siren(in_features=2, out_features=out_features, #modules.SingleBVPNet(out_features=out_features, type='sine', sidelength=image_resolution, in_features=2)
+        
+        self.hyper_netA = HyperNetwork(hyper_in_features=latent_dim, hyper_hidden_layers=1, hyper_hidden_features=256,
+                                      hypo_module=self.hypo_net)
+
+        self.hyper_netB = HyperNetwork(hyper_in_features=latent_dim, hyper_hidden_layers=1, hyper_hidden_features=256,
+                                      hypo_module=self.hypo_net)
+
+        #self.multiplier_net = ConvImgIntensity(channel=in_features, image_resolution=image_resolution, latent_dimension = latent_dim)
+
+        print(self)
+
+    def forward(self, model_input):
+        if model_input.get('embedding', None) is None:
+            embedding = self.encoder(model_input['img_sparse'])
+        else:
+            embedding = model_input['embedding']
+        hypo_paramsA = self.hyper_netA(embedding)
+        hypo_paramsB = self.hyper_netB(embedding)
+        
+        siren_outputA = self.hypo_net(model_input, params=hypo_paramsA)
+        siren_outputB = self.hypo_net(model_input, params=hypo_paramsB)
+
+        #intensity = self.multiplier_net(model_input['img_sparse'])
+        #intensity = torch.flatten(intensity,start_dim=2)
+        #intensity = torch.transpose(intensity,1,2)
+
+        #intensity =  intensity*.9 + .1 # clamping
+        
+        
+        sirenA = -nn.Sigmoid()(-siren_outputA['model_out'])*.9+.1 # clamping
+        sirenB = nn.Sigmoid()(siren_outputB['model_out'])*.9+.1 # clamping
+        
+        # Get SIREN with coord subset
+        if 'derivative_siren' in model_input:
+            dsiren_output = self.hypo_net(model_input['derivative_siren'], params=hypo_paramsA)
+            dsiren = -nn.Sigmoid()(-dsiren_output['model_out'])*.9+.1
+        else:
+            dsiren_output = {'model_in':None}
+            dsiren = None
+
+
+        #model_output = siren * intensity
+        model_output = sirenA * sirenB
+
+        # instead of siren_output['model_out'], use sigmoided version
+        return {'model_in': siren_outputA['model_in'], 'model_out':model_output, 'sirenA_out': sirenA, 'sirenB_out': sirenB, 'dsiren_in':dsiren_output['model_in'], 'dsiren_out':dsiren, 'latent_vec': embedding}
+
+    def get_hypo_net_weights(self, model_input):
+        embedding = self.encoder(model_input['img_sparse'])
+        hypo_params = self.hyper_netA(embedding) #TODO: CHANGE THIS
+        #hypo_params = self.hyper_net(embedding)
+        return hypo_params, embedding
+
+    def freeze_hypernet(self):
+        for param in self.hyper_net.parameters():
+            param.requires_grad = False
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+
+
+
+
 class ConvolutionalAutoEncoderToPath(nn.Module):
     def __init__(self, in_features, path_length, image_resolution=None, partial_conv=False):
         super().__init__()
@@ -1587,6 +1660,64 @@ def value_mse_NEURIPS(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192
 
 #laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds[0],preds[1], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
 value_mse_NEURIPS_with_coords = lambda preds,gt,epoch: value_mse_NEURIPS(preds,preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+
+
+
+
+
+
+def value_mse_DoubleSiren(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192,192)):
+
+    upper_end = dim[0]
+
+    #mask = model_outputs_dict['intensity']
+    
+    #regularizer_batch = torch.mean(mask,dim=[1,2])
+    #regularizer = torch.mean(regularizer_batch)/20.0
+
+    batch_size = model_outputs_dict['model_out'].shape[0]
+
+    sirenimg = torch.reshape(model_outputs_dict['sirenA_out'],(batch_size,1,dim[0],dim[1]))
+    minval = torch.min(sirenimg)
+
+    goals = torch.unsqueeze(gt_value_dict['goal'],1)
+
+    thingA = torch.index_select(sirenimg,2,gt_value_dict['goal'][:,0].long())
+    min_value = torch.index_select(thingA,3,gt_value_dict['goal'][:,1].long())
+    
+    goallossresult = torch.nn.ReLU()(-(sirenimg - min_value))
+    goal_avg_batch = torch.sum(goallossresult,dim=[1,2,3])
+    goal_loss = torch.mean(goal_avg_batch)
+    
+
+    implicit_gradient_loss = torch.nn.MSELoss()( gradient(model_outputs_dict['dsiren_out'], model_outputs_dict['dsiren_in'] ), gt_value_dict['gradient']) # on siren
+    
+    implicit_field_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'], gt_value_dict['field'] ) # on multiplication
+
+    
+    regularizer_batch = torch.mean(model_outputs_dict['sirenB_out'],dim=[2])
+    regularizer = torch.mean(regularizer_batch)/20.0
+
+
+    loss = 0.1 * implicit_gradient_loss + implicit_field_loss + 0.0 * goal_loss + regularizer #+ implicit_field_loss + implicit_gradient_loss + regularizer
+
+
+    #print("\tintensity loss:", regularizer.item())
+    print("\tgoal loss:", goal_loss.item())
+    print("\tmin val:", minval.item())
+    print("\tmin val:", min_value.item())
+
+    return loss
+
+value_mse_DoubleSiren_with_coords = lambda preds,gt,epoch: value_mse_DoubleSiren(preds,preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+
+
+
+
+
+
+
+
 
 
 

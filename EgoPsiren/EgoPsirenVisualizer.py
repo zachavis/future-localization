@@ -76,8 +76,8 @@ if __name__ == "__main__":
     #overfit_imploc_192_full_synthetic_grad
     #overfit_VAE_192_imageprior_full_synth
 
-
-    network = torch.load('overfit_imploc_192_full_final_grad.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
+    network = torch.load('overfit_test_network_exp_123.pt')
+    #network = torch.load('overfit_imploc_192_full_final_grad.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
     vae_network = torch.load('overfit_VAE_192_imageprior_full.pt') #''overfit_test_network_exp_AE.pt
     #test = network.module.state_dict()
     if type(network) == torch.nn.DataParallel:
@@ -94,9 +94,9 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path =  'S:\\fut_loc\\test\\' #'S:\\synth_marketplace_trials2021\\test\\' # # #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\' #'S:\\synth_marketplace_random2020\\test\\'
+    partial_folder_path =  'S:\\fut_loc\\dummytest\\' #'S:\\synth_marketplace_trials2021\\test\\' # # #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\' #'S:\\synth_marketplace_random2020\\test\\'
     
-    folder_name = '20150418_costco' #'Yasamin9085_t29_p3'# '20150402_grocery' #'20150401_walk_00' #'20150418_mall_00' # #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t36_p9' #'acofre20167850_t38_p18' #'10000000_test_00' #'marketplace6203_trand_p0' #
+    folder_name = '10000000_test_00' #'20150418_costco' #'Yasamin9085_t29_p3'# '20150402_grocery' #'20150401_walk_00' #'20150418_mall_00' # #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t36_p9' #'acofre20167850_t38_p18' #'10000000_test_00' #'marketplace6203_trand_p0' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -236,7 +236,7 @@ if __name__ == "__main__":
 
         
 
-        frameOffset = 35#38
+        frameOffset = 0#35#38
         frameEnd = len(os.listdir(folder_path + 'im\\')) #55
         imageScale = .1
 
@@ -870,12 +870,14 @@ if __name__ == "__main__":
             #axes[0].imshow(-outImage[0].cpu().view(ego_pixel_shape).detach().numpy(), extent=[*(minT,maxT), *(minR,maxR)], interpolation='none')#, cmap='gnuplot')
             outImagea = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
 
-
+            
+            NAVIGATION_STRING = 'sirenA_out' #'siren_out'
+            WALKABILITY_STRING = 'sirenB_out' #'intensity'
 
 
             predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
             if type(predictions) is dict:
-                outImage = (predictions['siren_out'], predictions['model_in'])
+                outImage = (predictions[NAVIGATION_STRING], predictions['model_in'])
             else:
                 outImage = predictions
             sirenimage = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
@@ -888,7 +890,7 @@ if __name__ == "__main__":
                 image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
                 image_siren_alpha[image_siren_alpha > 0.001] = .7
 
-                intensity_map = predictions['intensity'].cpu().view(ego_pixel_shape).detach().numpy()
+                intensity_map = predictions[WALKABILITY_STRING].cpu().view(ego_pixel_shape).detach().numpy()
 
 
 
@@ -1275,7 +1277,8 @@ if __name__ == "__main__":
 
 
 
-
+            #gotta blast!!!
+            
 
 
         
