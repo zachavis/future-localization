@@ -1,8 +1,16 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2 
 import random
 import copy 
+from sys import platform
+
+
+USING_LINUX = platform == "linux" or platform == "linux2"
+
+if not USING_LINUX:
+    import matplotlib.pyplot as plt
+    #from matplotlib import image
+
 
 # Need: PCL library
 
@@ -352,6 +360,9 @@ def PrintHelp():
 
 
 if __name__ == "__main__":
+
+    PRINT_DEBUG_IMAGES = True and not USING_LINUX
+
     data_file = 'S:\\structure_0001800_00.txt' #'S:\\fut_loc\\20150401_walk_00\\traj_prediction.txt'
 
     necessary_args = 0
@@ -627,6 +638,133 @@ if __name__ == "__main__":
 
 
 
+
+
+                if PRINT_DEBUG_IMAGES:
+                     #points = np.zeros((len(valid_frames[1:]),3))
+                    #count = 0
+                    #for key in valid_frames[1:]:
+                    #    print('Frame:',key)
+                    #    points[count] = frames[key]['C']
+                    #    count += 1
+
+                    ##points +=  np.ones(points.shape)*downscaler*down[None] + np.ones(points.shape)*rightscaler*right[None] + np.ones(points.shape)*forwardscaler*forward[None]
+
+
+
+                    #X = points.T
+                    #bigC = np.ones((3,X.shape[1]))
+                    #bigC = cameraCenter[:,None] * bigC
+                    #X_ = X-bigC
+
+
+        
+                    ## RESCALE TRAJECTORY HERE
+                    #X_ *= corrective_scalar
+                    #X_ = X_ - plane_normal_with_metric[:,None]
+
+
+                    X_ = X_aligned_cam - plane_normal_with_metric_aligned_cam[:,None]
+                    X_ = X_[:,X_[2] > 0]
+                    x = calib['K'] @ X_
+                    x /= x[2]
+                    x = x[:2]
+                    x_dis = Distort(x,calib['omega'],calib['K'])
+
+
+        
+                    #camdot = forward @ X_
+                    #X_ = X_[:,camdot>=0] # only in front of camera
+
+                    #augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
+                    #P = calib['K'] @ cameraRotation #@ augC
+                    ##augX_ = np.concatenate( ( X_, np.ones((1,X_.shape[1])) ), axis=0)
+                    #x = P @ X_
+                    #x /= x[2]
+                    #x = x[:2]
+                    #x_dis = Distort(x,calib['omega'],calib['K'])
+
+
+
+
+                    test_x, test_z  = np.meshgrid(np.linspace(-3,3,7),np.linspace(1,8,8))
+                    x = test_x.flatten()
+                    z = test_z.flatten()
+
+                    #z,x = Polar2Coord(test_t,test_r) # x,z ?
+                    #print(z)
+                    #print(x)
+
+                    #print('actual z:', test_r[0], '*', 'np.cos(',test_t[0],') =', test_r[0] * np.cos(test_t[0]))
+                    #print('actual x:', test_r[0], '*', 'np.sin(',test_t[0],') =', test_r[0] * np.sin(test_t[0]))
+
+                    coords_3D = np.zeros((len(z),3))
+                    coords_3D[:,0] = x
+                    coords_3D[:,2] = z
+            
+            
+                    #coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+                    #coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+                    coords_3D -= plane_normal_with_metric_aligned_cam
+            
+                    pixels = P @ coords_3D.T
+                    pixels /= pixels[2]
+                    pixels = pixels[:2]
+                    grid_dis = Distort(pixels,calib['omega'],calib['K'])
+
+
+
+
+                    print('projection stuff')
+                    img_dir = __data_source / __data_images / Path('image{:07d}.jpg'.format(traj_start)) #file_path+'\\image\\image{:07d}.jpg'.format(start_frame)
+
+                    img_dir_str = str(img_dir.resolve())
+                    img = cv2.imread(img_dir_str)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float64)/255.0
+                    #img[:,:] = 1
+
+
+
+                    fig, ax = plt.subplots(1,1)
+                    axes = [ax]
+                    axes[0].imshow(img)
+                    #axes[0].plot(0,0, 'ro', markersize = 10.0)
+                    #axes[0].plot(calib['K'][0,2],calib['K'][1,2], 'ro', markersize = 10.0)
+                    pix_d = np.zeros((len(valid_frames[1:]),3))
+                    start_key = valid_frames[0]
+                    #count = 0
+                    #for key in valid_frames[1:]:
+                    #    camera_center = frames[key]['C']
+                    #    camera_center[1] = .7
+                    #    pix_d[count] = ProjectWithDistortion(calib['omega'],calib['K'],frames[start_key]['R'],frames[start_key]['C'],camera_center)
+                    #   # if frames.has_key()
+
+                    #    #pix_d[count] = ProjectWithDistortion(calib['omega'],calib['K'],np.eye(3),np.zeros(3),points[count])
+                    #    count += 1
+                    #    #pix_u = calib['K'] @ points[i]
+                    #    #pix_d = cv.fisheye
+
+
+        
+                    #in_front = np.where(pix_d[:,2] > 0)
+                    #pix_front = pix_d[in_front]
+                    #ys = pix_front[:,1]
+                    #xs = pix_front[:,0]
+                    #axes[0].plot(x_dis_struct[0], x_dis_struct[1], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
+
+                    axes[0].plot(x_dis_struct[0], x_dis_struct[1], 'rx', alpha=.5, markersize = 0.3)#, markersize = 2.0)
+                    #axes[0].plot(x_dis_struct[0,just_else], x_dis_struct[1,just_else], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
+                    axes[0].plot(x_dis_struct[0,best_inliers], x_dis_struct[1,best_inliers], 'gx', alpha=.7, markersize = 1.0)#, markersize = 2.0)
+                    #axes[0].plot(x_dis_struct[0,just_below], x_dis_struct[1,just_below], 'gx', alpha=.9, markersize = 1.0)#, markersize = 2.0)
+       
+       
+                    axes[0].plot(x_dis[0], x_dis[1], 'b')#, markersize = 2.0)
+                    axes[0].plot(x_dis[0], x_dis[1], 'co', markersize = 2.0)
+                    
+                    axes[0].plot(grid_dis[0], grid_dis[1], 'yo', markersize = 4.0)
+                    
+
+                    plt.show()
 
 
 

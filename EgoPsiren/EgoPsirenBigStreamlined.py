@@ -158,7 +158,7 @@ USE_EGO = True
 if __name__ == "__main__":
     #DNN.current_epoch = 0
 
-    BATCH_SIZE = 1
+    BATCH_SIZE = 2
     N_WORKERS = 0
     
     # TODO put these values in a settings file on disk to force uniformity across programs

@@ -76,7 +76,7 @@ if __name__ == "__main__":
     #overfit_imploc_192_full_synthetic_grad
     #overfit_VAE_192_imageprior_full_synth
 
-    network = torch.load('overfit_test_network_exp_123.pt')
+    network = torch.load('overfit_double_siren_experimental.pt')
     #network = torch.load('overfit_imploc_192_full_final_grad.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
     vae_network = torch.load('overfit_VAE_192_imageprior_full.pt') #''overfit_test_network_exp_AE.pt
     #test = network.module.state_dict()
@@ -94,9 +94,9 @@ if __name__ == "__main__":
     print(os.getcwd())
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
-    partial_folder_path =  'S:\\fut_loc\\dummytest\\' #'S:\\synth_marketplace_trials2021\\test\\' # # #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\' #'S:\\synth_marketplace_random2020\\test\\'
+    partial_folder_path =  'S:\\fut_loc\\train\\' #'S:\\synth_marketplace_trials2021\\test\\' # # #'S:\\fut_loc\\synth\\' #'S:\\fut_loc\\test\\' #20150401_walk_00\\' #'S:\\synth_marketplace_random2020\\test\\'
     
-    folder_name = '10000000_test_00' #'20150418_costco' #'Yasamin9085_t29_p3'# '20150402_grocery' #'20150401_walk_00' #'20150418_mall_00' # #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t36_p9' #'acofre20167850_t38_p18' #'10000000_test_00' #'marketplace6203_trand_p0' #
+    folder_name = '20150401_walk_00' #'10000000_test_00' #'20150418_costco' #'Yasamin9085_t29_p3'# '20150402_grocery' #'20150418_mall_00' # #'20150419_ikea' # 'definitelynotzach8002_t36_p12' #'acofre20167850_t36_p9' #'acofre20167850_t38_p18' #'10000000_test_00' #'marketplace6203_trand_p0' #
     folder_path =  partial_folder_path + folder_name + '\\'
 
 
@@ -868,7 +868,7 @@ if __name__ == "__main__":
                 axes[1].set_ylim(*boundsY)
 
             #axes[0].imshow(-outImage[0].cpu().view(ego_pixel_shape).detach().numpy(), extent=[*(minT,maxT), *(minR,maxR)], interpolation='none')#, cmap='gnuplot')
-            outImagea = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
+            total_network_output = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
 
             
             NAVIGATION_STRING = 'sirenA_out' #'siren_out'
@@ -885,7 +885,7 @@ if __name__ == "__main__":
 
 
             if USE_INTENSITY:
-                image_siren_image = interpolate.interpn((range(outImagea.shape[0]),range(outImagea.shape[1])), outImagea, image_siren_pix_coords[[1,0]].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(img.shape[0], img.shape[1])
+                image_siren_image = interpolate.interpn((range(total_network_output.shape[0]),range(total_network_output.shape[1])), total_network_output, image_siren_pix_coords[[1,0]].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(img.shape[0], img.shape[1])
                 #image_siren_image = interpolate.interpn((np.array(list(range(outImagea.shape[0])))+.5,np.array(list(range(outImagea.shape[1])))+.5), outImagea, image_siren_pix_coords[[1,0]].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(img.shape[0], img.shape[1])
                 image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
                 image_siren_alpha[image_siren_alpha > 0.001] = .7
@@ -898,8 +898,8 @@ if __name__ == "__main__":
 
 
             if showHistogram:
-                tempval = axes[0].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
-                axes[1].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+                tempval = axes[0].imshow(total_network_output, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+                axes[1].imshow(total_network_output, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
         
             # Rerun again for gradient
             predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
@@ -996,7 +996,7 @@ if __name__ == "__main__":
 
 
 
-            min_along_y = np.argmin(outImagea,axis=1)
+            min_along_y = np.argmin(total_network_output,axis=1)
             y_coords = np.arange(0,ego_pixel_shape[0])
             below_thresh = np.zeros(ego_pixel_shape[0]).astype(np.bool)
             threshold = .2
@@ -1021,16 +1021,16 @@ if __name__ == "__main__":
                     below_thresh[i] = False
                     continue
 
-                val_at_point = outImagea[y,x]
+                val_at_point = total_network_output[y,x]
 
                 if have_prev_point == False:
                     #below_thresh[i] = val_at_point > lowest_val - tuning_parameter * lowest_val#< threshold
                     if True: #below_thresh[i]:
                         have_prev_point = True
-                        x = outImagea.shape[1]//2+1 # make center assumption
+                        x = total_network_output.shape[1]//2+1 # make center assumption
                         prev_x = x
 
-                        val_at_point = outImagea[y,x]
+                        val_at_point = total_network_output[y,x]
 
                         if val_at_point < lowest_val:
                             lowest_val = val_at_point
@@ -1044,11 +1044,11 @@ if __name__ == "__main__":
 
                 next_x = np.array([lowerer,lower,prev_x,upper,upperer])
                 
-                leftleft_val = outImagea[y,lowerer]
-                left_val = outImagea[y,lower]
-                center_val = outImagea[y,prev_x]
-                right_val = outImagea[y,upper]
-                rightright_val = outImagea[y,upperer]
+                leftleft_val = total_network_output[y,lowerer]
+                left_val = total_network_output[y,lower]
+                center_val = total_network_output[y,prev_x]
+                right_val = total_network_output[y,upper]
+                rightright_val = total_network_output[y,upperer]
 
                 vals = np.array([leftleft_val,left_val, center_val, right_val,rightright_val])
 
@@ -1111,8 +1111,19 @@ if __name__ == "__main__":
 
             load_offset = 1 if LOAD_NETWORK_FROM_DISK else 0
             load_offset += 1 if USE_INTENSITY else 0
-            fig, axes = plt.subplots(1,2 + load_offset, gridspec_kw = {'wspace':.05,'width_ratios': [4/3, 1,1,1]})
-            fig.suptitle('Comparison of Network Output with Ground Truth')
+            #2+load_offset
+            #fig, axes = plt.subplots(1,4, gridspec_kw = {'wspace':.05,'width_ratios': [4/3,1,1,1]})
+            fig = plt.figure()
+            gs = fig.add_gridspec(2,4)
+            axes = [fig.add_subplot(gs[:, :2]),
+                    fig.add_subplot(gs[0, 2]),
+                    fig.add_subplot(gs[0, 3]),
+                    fig.add_subplot(gs[1, 2]),
+                    fig.add_subplot(gs[1, 3]),]
+
+            #fig, axes = plt.subplots(1,1, gridspec_kw = {'wspace':.05,'width_ratios': [1]})
+            #fig, axes = plt.subplots(2,2, gridspec_kw = {'wspace':.05,'width_ratios': [4/3,1,1,1]})
+            #fig.suptitle('Comparison of Network Output with Ground Truth')
             trajnp = np.array(test_pix_trajectory)
 
             boundsX = (0,ego_pixel_shape[1])
@@ -1204,7 +1215,7 @@ if __name__ == "__main__":
                 
             
             
-
+            
             axes[1].set_title('Input Image with Mask')#(Unnormalized)')
             boundsX = (0,ego_pixel_shape[1])
             boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
@@ -1269,7 +1280,7 @@ if __name__ == "__main__":
             print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
             #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
             plt.imsave('walkable.png',intensity_map, cmap='winter')
-            plt.imsave('affordance.png',outImagea, vmax = 0, vmin = -1.0, cmap='hot')
+            plt.imsave('affordance.png',total_network_output, vmax = 0, vmin = -1.0, cmap='hot')
             #plt.imsave('egomap.png', np.moveaxis(0.5*(test_image+1),0,-1))
             #plt.imsave('siren.png', sirenimage, cmap='viridis')
 
@@ -1289,11 +1300,11 @@ if __name__ == "__main__":
             #combined = - (intensity_map*.9 + .1) * np.maximum(-outImagea,0)
             #print("comb max:", np.max(combined),"comb min:",np.min(combined))
             #(outImagea*10).astype(int).astype(float)/10
-            tempval = axes[3].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none',cmap='hot')
+            tempval = axes[3].imshow(total_network_output, extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none',cmap='hot')
             #axes[3].plot(trajnp[:,0], trajnp[:,1], 'm--')
             #axes[3].plot(tpix_AlexNet, rpix_AlexNet, 'r--')
             #axes[3].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
-            siren_min = np.unravel_index(np.argmin(outImagea),outImagea.shape)
+            siren_min = np.unravel_index(np.argmin(total_network_output),total_network_output.shape)
             #axes[1+load_offset].plot(grad_desc_positions[:,0],grad_desc_positions[:,1],'r')
             #axes[1+load_offset].plot(siren_min[1],siren_min[0],'cx',markersize=4)
             #axes[1+load_offset].plot(grad_desc_positions[-1,0],grad_desc_positions[-1,1],'rx',markersize=4)
@@ -1309,11 +1320,11 @@ if __name__ == "__main__":
             fig.colorbar(tempval, cax, orientation='horizontal')
 
     
-            #axes[2+load_offset].set_title('GT Value with GT Traj')
-            #axes[2+load_offset].set_xlim(*boundsX)
-            #axes[2+load_offset].set_ylim(*boundsY)
-            #axes[2+load_offset].set_aspect(1)
-            #axes[2+load_offset].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none')
+            axes[4].set_title('GT Value with GT Traj')
+            axes[4].set_xlim(*boundsX)
+            axes[4].set_ylim(*boundsY)
+            axes[4].set_aspect(1)
+            axes[4].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none', cmap='hot')
             #print('avg gt:',np.mean(np.reshape(test_coord_value,(ego_pixel_shape))))
             #axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             #axes[2+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')

@@ -1668,26 +1668,26 @@ value_mse_NEURIPS_with_coords = lambda preds,gt,epoch: value_mse_NEURIPS(preds,p
 
 def value_mse_DoubleSiren(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192,192)):
 
-    upper_end = dim[0]
+    #upper_end = dim[0]
 
     #mask = model_outputs_dict['intensity']
     
     #regularizer_batch = torch.mean(mask,dim=[1,2])
     #regularizer = torch.mean(regularizer_batch)/20.0
 
-    batch_size = model_outputs_dict['model_out'].shape[0]
+    #batch_size = model_outputs_dict['model_out'].shape[0]
 
-    sirenimg = torch.reshape(model_outputs_dict['sirenA_out'],(batch_size,1,dim[0],dim[1]))
-    minval = torch.min(sirenimg)
+    #sirenimg = torch.reshape(model_outputs_dict['sirenA_out'],(batch_size,1,dim[0],dim[1]))
+    #minval = torch.min(sirenimg)
 
-    goals = torch.unsqueeze(gt_value_dict['goal'],1)
+    #goals = torch.unsqueeze(gt_value_dict['goal'],1)
 
-    thingA = torch.index_select(sirenimg,2,gt_value_dict['goal'][:,0].long())
-    min_value = torch.index_select(thingA,3,gt_value_dict['goal'][:,1].long())
+    #thingA = torch.index_select(sirenimg,2,gt_value_dict['goal'][:,0].long())
+    #min_value = torch.index_select(thingA,3,gt_value_dict['goal'][:,1].long())
     
-    goallossresult = torch.nn.ReLU()(-(sirenimg - min_value))
-    goal_avg_batch = torch.sum(goallossresult,dim=[1,2,3])
-    goal_loss = torch.mean(goal_avg_batch)
+    #goallossresult = torch.nn.ReLU()(-(sirenimg - min_value))
+    #goal_avg_batch = torch.sum(goallossresult,dim=[1,2,3])
+    #goal_loss = torch.mean(goal_avg_batch)
     
 
     implicit_gradient_loss = torch.nn.MSELoss()( gradient(model_outputs_dict['dsiren_out'], model_outputs_dict['dsiren_in'] ), gt_value_dict['gradient']) # on siren
@@ -1698,14 +1698,15 @@ def value_mse_DoubleSiren(model_outputs_dict, coords, gt_value_dict, epoch, dim=
     regularizer_batch = torch.mean(model_outputs_dict['sirenB_out'],dim=[2])
     regularizer = torch.mean(regularizer_batch)/20.0
 
+    goal_loss = 0.0
 
     loss = 0.1 * implicit_gradient_loss + implicit_field_loss + 0.0 * goal_loss + regularizer #+ implicit_field_loss + implicit_gradient_loss + regularizer
 
 
     #print("\tintensity loss:", regularizer.item())
-    print("\tgoal loss:", goal_loss.item())
-    print("\tmin val:", minval.item())
-    print("\tmin val:", min_value.item())
+    #print("\tgoal loss:", goal_loss.item())
+    #print("\tmin val:", minval.item())
+    #print("\tmin val:", min_value.item())
 
     return loss
 
