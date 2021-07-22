@@ -1698,9 +1698,11 @@ def value_mse_DoubleSiren(model_outputs_dict, coords, gt_value_dict, epoch, dim=
     regularizer_batch = torch.mean(model_outputs_dict['sirenB_out'],dim=[2])
     regularizer = torch.mean(regularizer_batch)/20.0
 
+    walkability_loss = torch.nn.L1Loss()(model_outputs_dict['sirenB_out'], gt_value_dict['walkability'] ) # on multiplication
+
     goal_loss = 0.0
 
-    loss = 0.1 * implicit_gradient_loss + implicit_field_loss + 0.0 * goal_loss + regularizer #+ implicit_field_loss + implicit_gradient_loss + regularizer
+    loss = 0.1 * implicit_gradient_loss + implicit_field_loss + 0.0 * goal_loss + walkability_loss + regularizer #+ implicit_field_loss + implicit_gradient_loss + regularizer
 
 
     #print("\tintensity loss:", regularizer.item())
