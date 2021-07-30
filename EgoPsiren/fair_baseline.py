@@ -359,9 +359,19 @@ def PrintHelp():
 
 
 
+
+
+
+
+########## ########## ########## ########## ########## ########## 
+## MAIN ## MAIN ## MAIN ## MAIN ## MAIN ## MAIN ## MAIN ## MAIN 
+########## ########## ########## ########## ########## ########## 
+
+
 if __name__ == "__main__":
 
-    PRINT_DEBUG_IMAGES = True and not USING_LINUX
+    PRINT_DEBUG_IMAGES = False and not USING_LINUX
+    READ_ARGS = True
 
     data_file = 'S:\\structure_0001800_00.txt' #'S:\\fut_loc\\20150401_walk_00\\traj_prediction.txt'
 
@@ -392,47 +402,50 @@ if __name__ == "__main__":
 
     __trajectory_buffer = {} # key is the frame, and a trajectory is a list of: [1D time instance, 3D point, 2D dummy var] 
 
-    #try:
-    #    opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
-    #except getopt.GetoptError:
-    #    print('Arguments are malformed. TODO: put useful help here.')#'test.py -i <inputfile>')
-    #    sys.exit(2)
+    if READ_ARGS:
+        #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
 
-    #for opt, arg in opts:
-    #    if opt in ("-d", "--data"):
-    #        __data_source = Path(arg)
-    #        if not data_root.exists():
-    #            print("Data path does not exist.")
-    #            sys.exit(3)
-    #        necessary_args += 1
+        try:
+            opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
+        except getopt.GetoptError:
+            print('Arguments are malformed. TODO: put useful help here.')#'test.py -i <inputfile>')
+            sys.exit(2)
 
-    #    if opt in ("-i", "--images"):
-    #        __data_images = Path(arg)
-    #        if not data_root.exists():
-    #            print("Images path does not exist.")
-    #            sys.exit(3)
-    #        necessary_args += 1
+        for opt, arg in opts:
+            if opt in ("-d", "--data"):
+                __data_source = Path(arg)
+                if not data_root.exists():
+                    print("Data path does not exist.")
+                    sys.exit(3)
+                necessary_args += 1
 
-    #    if opt in ("-o", "--output"):
-    #        __data_target = Path(arg)
-    #        if not __data_target.exists():
-    #            __data_target.mkdir()
-    #        necessary_args += 1
+            if opt in ("-i", "--images"):
+                __data_images = Path(arg)
+                if not data_root.exists():
+                    print("Images path does not exist.")
+                    sys.exit(3)
+                necessary_args += 1
 
-    #    if opt in ("-l", "--lenth"):
-    #        __trajLength = arg
-    #        necessary_args += 1
+            if opt in ("-o", "--output"):
+                __data_target = Path(arg)
+                if not __data_target.exists():
+                    __data_target.mkdir()
+                necessary_args += 1
 
-    #    if opt in ("-s", "--stride"):
-    #        __trajStride = arg
-    #        necessary_args += 1
+            if opt in ("-l", "--length"):
+                __trajLength = int(arg)
+                necessary_args += 1
 
-    #    if opt in ("-v", "--verbose"):
-    #        verbose_flag = True
+            if opt in ("-s", "--stride"):
+                __trajStride = int(arg)
+                necessary_args += 1
 
-    #    if opt in ("-h", "--help"):
-    #        PrintHelp()
-    #        sys.exit(-1)
+            if opt in ("-v", "--verbose"):
+                verbose_flag = True
+
+            if opt in ("-h", "--help"):
+                PrintHelp()
+                sys.exit(-1)
 
     #if necessary_args < 2:
     #    print('Not enough args')
@@ -450,8 +463,8 @@ if __name__ == "__main__":
     #n_frames = 180
 
 
-    
-    USE_MEAN_DOWN = True
+    USE_GLOBAL_MEAN_DOWN = True
+    USE_MEAN_DOWN = False #True
 
 
     # Loop over reconstruction folders
@@ -474,6 +487,74 @@ if __name__ == "__main__":
             print('omega:',calib['omega'])
             frames = ReadCameraFile(__data_source / reconstruction_folder / Path('camera.txt'), starting_frame)
             num_frames = len(frames)
+
+
+
+            mean_start = starting_frame
+            #while mean_start < starting_frame + num_frames:
+            #    # blah
+
+            # Get all valid frames in trajLength sequence
+            valid_frames = []
+            for key in range( mean_start, mean_start + num_frames ):
+                if key in frames:
+                    valid_frames.append(key)
+
+            print(len(valid_frames))
+
+            # PROCESS THE TRAJECTORY AND ADD IT TO A LIST
+                
+            global_mean_down = np.zeros(3)
+            num_valid_frames = len(valid_frames)
+            global_mean_position = np.zeros(3)
+            for i in range(num_valid_frames):
+                thisR = frames[valid_frames[i]]['R']
+                thisdown = thisR[1]
+                thisC = frames[valid_frames[i]]['C']
+                global_mean_down += thisdown
+                global_mean_position += thisC
+            global_mean_down /= np.linalg.norm(global_mean_down)
+            global_mean_position /= num_valid_frames
+        
+            if USE_GLOBAL_MEAN_DOWN and not USE_MEAN_DOWN:
+                world_down = global_mean_down
+
+
+
+            # TRAJECTORY SEGMENT INDEPENDENT PLANE FITTING:
+
+            point_cloud = ReadPointCloud(__data_source / reconstruction_folder / Path('structure.txt'))
+
+            X = point_cloud['XYZ']
+            bigC = np.ones((3,X.shape[1]))
+            bigC = global_mean_position[:,None] * bigC
+            X___ = X-bigC
+            #camdot = forward @ X___
+            camdot_below = world_down @ X___
+
+
+            #infront_logical = np.zeros(X___.shape[1], dtype=bool)
+            #infront_logical[camdot>=0]=True
+        
+            below_logical = np.zeros(X___.shape[1], dtype=bool)
+            below_logical[camdot_below>=0]=True
+        
+            #just_below = np.logical_and(below_logical, infront_logical)
+
+
+            X_ = X___[:,below_logical] # shifted, but below the horizon
+            X__ = X[:,below_logical] # non shifted, but below the horizon
+
+            PlaneSeg = Plane()
+            best_eq, plane_inliers = PlaneSeg.fit(X_.T, 0.6,20,1000,-world_down, np.pi/12.0)
+
+            #inliers_logical = np.zeros(X_.shape[1], dtype=bool)
+            #inliers_logical[best_inliers]=True
+
+            #augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
+            #P = calib['K'] @ cameraRotation #@ augC
+
+            #X_ = cameraRotation @ X_ # Align into camera space where 
 
 
 
@@ -521,7 +602,7 @@ if __name__ == "__main__":
         
                 if USE_MEAN_DOWN:
                     world_down = mean_down
-                else:
+                elif not USE_GLOBAL_MEAN_DOWN:
                     world_down = np.array([0,1,0])
         
                 right = cameraRotation[0]
@@ -530,43 +611,100 @@ if __name__ == "__main__":
 
 
 
+                if not USE_GLOBAL_MEAN_DOWN:
+
+                    #point_cloud = ReadPointCloud(__data_source / reconstruction_folder / Path('structure.txt'))
+
+                    X = point_cloud['XYZ']
+                    bigC = np.ones((3,X.shape[1]))
+                    bigC = cameraCenter[:,None] * bigC
+                    X_ = X-bigC
+                    camdot = forward @ X_
+                    camdot_below = (cameraRotation @ world_down) @ X_ # TODO FIX THIS -- IT'S DEPENDENT ON CAMERA SPACE BUT NOT TRANSFORMED
 
 
-                point_cloud = ReadPointCloud(__data_source / reconstruction_folder / Path('structure.txt'))
-
-                X = point_cloud['XYZ']
-                bigC = np.ones((3,X.shape[1]))
-                bigC = cameraCenter[:,None] * bigC
-                X_ = X-bigC
-                camdot = forward @ X_
-                camdot_below = world_down @ X_
-
-
-                infront_logical = np.zeros(X_.shape[1], dtype=bool)
-                infront_logical[camdot>=0]=True
+                    infront_logical = np.zeros(X_.shape[1], dtype=bool)
+                    infront_logical[camdot>=0]=True
         
-                below_logical = np.zeros(X_.shape[1], dtype=bool)
-                below_logical[camdot_below>=0]=True
+                    below_logical = np.zeros(X_.shape[1], dtype=bool)
+                    below_logical[camdot_below>=0]=True
         
-                just_below = np.logical_and(below_logical, infront_logical)
+                    just_below = np.logical_and(below_logical, infront_logical)
 
 
-                X_ = X_[:,just_below]
+                    X_ = X_[:,just_below]
 
-                PlaneSeg = Plane()
-                best_eq, best_inliers = PlaneSeg.fit(X_.T, 0.5,20,1000,-world_down, np.pi/12.0)
+                    PlaneSeg = Plane()
+                    best_eq, plane_inliers = PlaneSeg.fit(X_.T, 0.5,20,1000,-world_down, np.pi/12.0)
 
-                inliers_logical = np.zeros(X_.shape[1], dtype=bool)
-                inliers_logical[best_inliers]=True
+                    best_inliers = plane_inliers
 
-                augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
-                P = calib['K'] @ cameraRotation #@ augC
+                    inliers_logical = np.zeros(X_.shape[1], dtype=bool)
+                    inliers_logical[best_inliers]=True
 
-                X_ = cameraRotation @ X_ # Align into camera space where 
+                    augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
+                    P = calib['K'] @ cameraRotation #@ augC
+
+                    X_ = cameraRotation @ X_ # Align into camera space where 
+                else:
+                    #point_cloud = ReadPointCloud(__data_source / reconstruction_folder / Path('structure.txt'))
+
+                    #X = point_cloud['XYZ']
+                    bigC = np.ones((3,X__.shape[1]))
+                    bigC = cameraCenter[:,None] * bigC
+                    X_ = X__-bigC # use non-shifted but below horizon X values
+                    camdot = forward @ X_
+                    camdot_below = (cameraRotation @ world_down) @ X_
 
 
+                    infront_logical = np.zeros(X_.shape[1], dtype=bool)
+                    infront_logical[camdot>=0]=True
+        
+                    #below_logical = np.zeros(X_.shape[1], dtype=bool)
+                    #below_logical[camdot_below>=0]=True
+        
+                    #just_below = np.logical_and(below_logical, infront_logical)
 
 
+                    #X_ = X_[:,just_below]
+
+                    #PlaneSeg = Plane()
+                    #best_eq, best_inliers = PlaneSeg.fit( X_.T, 0.5,20,1000,-world_down, np.pi/12.0)
+
+                    #inliers_logical = np.zeros(X_.shape[1], dtype=bool)
+                    #inliers_logical[plane_inliers]=True
+                    
+                    #in_plane_and_in_front = np.logical_and(infront_logical,inliers_logical)
+                    
+                    #best_inliers = np.where(inliers_logical[infront_logical])[0]
+
+                    test1 = np.arange(X_.shape[1])
+                    test2 = test1[infront_logical]
+
+                    best_inliers = np.nonzero(np.in1d(np.arange(X_.shape[1])[infront_logical],plane_inliers))[0]
+                    
+                    X_ = X_[:,infront_logical]
+
+                    #best_inliers = [] # list of inliers ids
+                    #best_eq2 = np.copy(best_eq)
+                    ##best_eq2[:-1] = cameraRotation @ best_eq2[:-1]
+                    #dist_pt = (best_eq2[0]*X_[0,:]+best_eq2[1]*X_[1, :]+best_eq2[2]*X_[2, :]+best_eq2[3])/np.sqrt(best_eq2[0]**2+best_eq2[1]**2+best_eq2[2]**2)
+            
+                    ## Select indexes where distance is biggers than the threshold
+                    #best_inliers = np.where(np.abs(dist_pt) <= 0.5)[0]
+
+
+                    augC = np.concatenate((np.eye(3),-cameraCenter[:,None]),axis=1)
+                    P = calib['K'] @ cameraRotation #@ augC
+
+                    X_ = cameraRotation @ X_ # Align into camera space where 
+                    #infront_logical = np.zeros(X___.shape[1], dtype=bool)
+                    #infront_logical[camdot>=0]=True
+                    #just_below = np.logical_and(below_logical, infront_logical)
+                    
+                    #X_ = X___[:,just_below]
+                    #P = calib['K'] @ cameraRotation #@ augC
+                    #X_ = cameraRotation @ X_ # Align into camera space where 
 
 
                 x = calib['K'] @ X_
@@ -814,6 +952,7 @@ if __name__ == "__main__":
         
     trajectory_test.close()
     imlist_test.close()
+
     #print('done')
 
     ## Save first image in imlist

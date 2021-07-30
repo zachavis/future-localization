@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
         #im = sprintf('%sim/%s', folder_path, vFilename{iFrame});
         im = "{}im\\{}".format(folder_path, vFilename[iFrame])
-        #disp = "{}disparity\\{}{}".format(folder_path, vFilename[iFrame],'.disp.txt')
+        disp = "{}disparity\\{}{}".format(folder_path, vFilename[iFrame],'.disp.txt')
 
         if not os.path.isfile(im):
             print('could not find file')
@@ -229,8 +229,8 @@ if __name__ == "__main__":
 
         img = cv2.cvtColor(cv2.imread(im), cv2.COLOR_BGR2RGB).astype(np.float64)/255.0
 
-        #disp_img = np.genfromtxt(disp, delimiter=',')[:,:-1] #np.loadtxt(disp, delimiter=',')
-        disp_img = np.zeros((1,1))
+        disp_img = np.genfromtxt(disp, delimiter=',')[:,:-1] #np.loadtxt(disp, delimiter=',')
+        #disp_img = np.zeros((1,1))
         
         
         #cv2.imshow('intermediate',intermediate)
@@ -779,6 +779,112 @@ if __name__ == "__main__":
 
 
 
+
+            
+            depth_pixel_coords2 = np.array( [ [j+.5,i+.5,1.0] for i in range(disp_img.shape[0]) for j in range(disp_img.shape[1]) ], dtype=np.float32)
+
+
+            ### CALCULATE GROUND PLANE AND POINTS ABOVE PLANE
+
+
+            # Get distance map:
+            CAMERA_BASELINE = .1 # meters
+            CAMERA_FOCAL = 0.015
+
+            clipped_disp = np.clip(disp_img,0,20)
+            distance_estimate = np.clip(np.reciprocal(clipped_disp)* 50,0,50) # * CAMERA_BASELINE * CAMERA_FOCAL, 0, 10)
+
+
+
+            # get plane eq
+
+            p_normal = tr['up']/np.linalg.norm(tr['up'])
+            p_origin = -tr['up'] #camera assumed to be at 0,0,0
+            #e_origin = np.zeros(3) #zero vector
+            e_rays = R_rect.T @ np.linalg.inv(K_data2) @ depth_pixel_coords2.T #+0
+            e_rays /= np.linalg.norm(e_rays,axis=0)
+            print('norm:', np.linalg.norm(e_rays[:,100]))
+
+            
+            
+
+            # get point along ray
+
+            pts = (e_rays * distance_estimate.flatten()[None]).T #depths[None]
+
+            points2_dists = np.linalg.norm(pts, axis=1)
+
+            distafromcam = points2_dists.reshape(disp_img.shape)
+
+
+
+            
+            plane_eq = np.zeros(4)
+            plane_eq[:-1] = p_normal
+            plane_eq[-1] = - p_normal @ p_origin
+
+
+
+
+
+            # check distance
+            dist_pt = (plane_eq[0]*pts[:,0]+plane_eq[1]*pts[:, 1]+plane_eq[2]*pts[:, 2]+plane_eq[3])/np.sqrt(plane_eq[0]**2+plane_eq[1]**2+plane_eq[2]**2)
+            
+            #points2_dists = np.linalg.norm(dist_pt, axis=0)
+
+            distcheck = np.abs(dist_pt.reshape(disp_img.shape))
+
+
+            # filter if dist is < val
+            #close_to_plane = np.copy(distcheck)
+            #close_to_plane 
+
+
+
+
+
+
+
+            fig, axes = plt.subplots(1,2)
+            #axes = [ax]
+            
+            #plt.imsave('bigegomap.png',img2)
+            axes[0].set_title('Disparity Image')
+             #axes[3].plot(t, logr, 'r')
+
+            tempval = axes[0].imshow(clipped_disp)
+
+            
+            cax = fig.add_axes([0.1, .95, .4, .05])
+            fig.colorbar(tempval, cax, orientation='horizontal')
+
+
+
+            axes[1].set_title('Distance Image')
+            #tempval = axes[1].imshow(distafromcam)
+            tempval = axes[1].imshow(distcheck, cmap='tab20c')
+
+            
+            cax = fig.add_axes([.53, .95, .4, .05])
+            fig.colorbar(tempval, cax, orientation='horizontal')
+            
+
+            plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             test_t, test_logr  = np.meshgrid(np.linspace(minT,maxT,5),np.linspace(0,5,6))
             test_t = test_t.flatten()
             test_logr = test_logr.flatten()
@@ -924,8 +1030,8 @@ if __name__ == "__main__":
 
 
             if True:
-                fig, ax = plt.subplots(1,1)
-                axes = [ax]
+                fig, axes = plt.subplots(1,2)
+                #axes = [ax]
             
                 #plt.imsave('bigegomap.png',img2)
                 axes[0].set_title('EgoRetinal Map')
@@ -948,9 +1054,26 @@ if __name__ == "__main__":
                 #liltpix = ego_t2pix(t)
                 #lilrpix = ego_r2pix(logr)
 
-                plt.plot(bigtpix,bigrpix,'m',linewidth=3)
+
+                #plt.show()
+
+                
+                axes[0].plot(bigtpix,bigrpix,'m',linewidth=3)
+
+                #fig, ax = plt.subplots(1,1)
+                #axes = [ax]
+                axes[1].set_xlim(*boundsX)
+                axes[1].set_ylim(*boundsY)
+                axes[1].set_aspect(1)
+                axes[1].set_title('EgoDisp Map')
+                tempval = axes[1].imshow(disp_img2)
+
+                
+                cax = fig.add_axes([.53, .95, .4, .05])
+                fig.colorbar(tempval, cax, orientation='horizontal')
 
                 plt.show()
+
 
 
                 fig, ax = plt.subplots(1,1)
@@ -990,14 +1113,13 @@ if __name__ == "__main__":
                 plt.show()
 
 
-
-
-
+            
 
 
 
             fig, ax = plt.subplots(1,1)#, figsize=(18,6))
             axes = [ax] # only use if there's 1 column
+
 
             ##newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
             ##fig.set_size_inches(16, 24)

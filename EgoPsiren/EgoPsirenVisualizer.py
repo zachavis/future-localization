@@ -76,7 +76,7 @@ if __name__ == "__main__":
     #overfit_imploc_192_full_synthetic_grad
     #overfit_VAE_192_imageprior_full_synth
 
-    network = torch.load('overfit_double_siren_experimental.pt')
+    network = torch.load('overfit_doublesiren_walk.pt')
     #network = torch.load('overfit_imploc_192_full_final_grad.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
     vae_network = torch.load('overfit_VAE_192_imageprior_full.pt') #''overfit_test_network_exp_AE.pt
     #test = network.module.state_dict()
