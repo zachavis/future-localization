@@ -403,7 +403,7 @@ if __name__ == "__main__":
     __trajectory_buffer = {} # key is the frame, and a trajectory is a list of: [1D time instance, 3D point, 2D dummy var] 
 
     if READ_ARGS:
-        sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
+        #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -532,6 +532,7 @@ if __name__ == "__main__":
 
             if X.shape[1] < 20:
                 print('Insufficient points (', X.shape[1], '/20) for reconstruction.')
+                continue
             else:
                 print('Point cloud contains (', X.shape[1], ') points.')
 
@@ -540,6 +541,7 @@ if __name__ == "__main__":
             X___ = X-bigC
             #camdot = forward @ X___
             camdot_below = world_down @ X___
+
 
 
             #infront_logical = np.zeros(X___.shape[1], dtype=bool)
@@ -553,6 +555,13 @@ if __name__ == "__main__":
 
             X_ = X___[:,below_logical] # shifted, but below the horizon
             X__ = X[:,below_logical] # non shifted, but below the horizon
+
+            
+            if X_.shape[1] < 20:
+                print('Insufficient points below camera (', X_.shape[1], '/20) for reconstruction.')
+                continue
+            else:
+                print('Point cloud contains (', X_.shape[1], ') points below the camera.')
 
             PlaneSeg = Plane()
             best_eq, plane_inliers = PlaneSeg.fit(X_.T, 0.6,20,1000,-world_down, np.pi/12.0)
