@@ -369,7 +369,7 @@ def PrintHelp():
 
 
 if __name__ == "__main__":
-
+    print('Preparing to reconstruct trajectories!')
     PRINT_DEBUG_IMAGES = False and not USING_LINUX
     READ_ARGS = True
 
@@ -404,7 +404,7 @@ if __name__ == "__main__":
 
     if READ_ARGS:
         #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
-
+        print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
         except getopt.GetoptError:
@@ -413,22 +413,23 @@ if __name__ == "__main__":
 
         for opt, arg in opts:
             if opt in ("-d", "--data"):
+                print('setting data source to be', arg,'...')
                 __data_source = Path(arg)
-                if not data_root.exists():
+                if not __data_source.exists():
                     print("Data path does not exist.")
                     sys.exit(3)
                 necessary_args += 1
 
             if opt in ("-i", "--images"):
                 __data_images = Path(arg)
-                if not data_root.exists():
-                    print("Images path does not exist.")
-                    sys.exit(3)
+                #if not __data_images.exists():
+                #    print("Images path does not exist.")
+                #    sys.exit(3)
                 necessary_args += 1
 
             if opt in ("-o", "--output"):
                 __data_target = Path(arg)
-                if not __data_target.exists():
+                if not __data_target.is_dir():
                     __data_target.mkdir()
                 necessary_args += 1
 
@@ -470,14 +471,16 @@ if __name__ == "__main__":
     # Loop over reconstruction folders
     for folder_path in __data_source.iterdir(): #next(os.walk(partial_folder_path))[1]:
             if not folder_path.is_dir():
+                print('skipping',folder_path,'...')
                 continue
             full_part = folder_path.name
             identifier = folder_path.name[:14]
             if identifier != 'reconstruction':
+                print('skipping',folder_path,'with ID:', identifier, 'is is not reconstruction...')
                 continue
             recon_id = folder_path.name[14:]
             starting_frame = int(recon_id)
-
+            print('reconstructing',folder_path,'...')
 
             
             reconstruction_folder = Path('reconstruction{:07d}'.format(starting_frame))
