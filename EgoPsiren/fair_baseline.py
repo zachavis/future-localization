@@ -488,7 +488,14 @@ if __name__ == "__main__":
             calib = ReadCalibration(__data_source / __data_images / Path('calib_fisheye.txt'))
             print('K:',calib['K'])
             print('omega:',calib['omega'])
-            frames = ReadCameraFile(__data_source / reconstruction_folder / Path('camera.txt'), starting_frame)
+
+            cameras_path = __data_source / reconstruction_folder / Path('camera.txt')
+
+            if not cameras_path.exists():
+                print('Could not find camera.txt. Skipping...')
+                continue
+
+            frames = ReadCameraFile(cameras_path, starting_frame)
             num_frames = len(frames)
 
 
