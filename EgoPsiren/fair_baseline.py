@@ -403,7 +403,7 @@ if __name__ == "__main__":
     __trajectory_buffer = {} # key is the frame, and a trajectory is a list of: [1D time instance, 3D point, 2D dummy var] 
 
     if READ_ARGS:
-        #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
+        sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -429,7 +429,7 @@ if __name__ == "__main__":
 
             if opt in ("-o", "--output"):
                 __data_target = Path(arg)
-                if not __data_target.is_dir():
+                if not __data_target.exists():
                     __data_target.mkdir()
                 necessary_args += 1
 
@@ -527,8 +527,14 @@ if __name__ == "__main__":
             # TRAJECTORY SEGMENT INDEPENDENT PLANE FITTING:
 
             point_cloud = ReadPointCloud(__data_source / reconstruction_folder / Path('structure.txt'))
-
+            
             X = point_cloud['XYZ']
+
+            if X.shape[1] < 20:
+                print('Insufficient points (', X.shape[1], '/20) for reconstruction.')
+            else:
+                print('Point cloud contains (', X.shape[1], ') points.')
+
             bigC = np.ones((3,X.shape[1]))
             bigC = global_mean_position[:,None] * bigC
             X___ = X-bigC
