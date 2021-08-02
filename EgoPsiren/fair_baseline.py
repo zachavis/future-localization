@@ -951,10 +951,10 @@ if __name__ == "__main__":
             # if a trajectory will be longer than the end of the data, we should
 
     
-    trajectory_test = open(__data_target / Path('traj_prediction_test.txt'), 'w')
+    trajectory_test = open(__data_target / Path('traj_prediction.txt'), 'w')
     trajectory_test.write('nFrames: {num}\n'.format(num=len(__trajectory_buffer)))
     
-    imlist_test = open(__data_target / Path('im_list_test.list'), 'w')
+    imlist_test = open(__data_target / Path('im_list.list'), 'w')
 
 
     frame_id = 0
