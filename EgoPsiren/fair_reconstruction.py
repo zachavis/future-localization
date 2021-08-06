@@ -523,6 +523,12 @@ if __name__ == "__main__":
                 thisC = frames[valid_frames[i]]['C']
                 global_mean_down += thisdown
                 global_mean_position += thisC
+
+            
+            if num_valid_frames == 0:
+                print('There are no valid frames for this trajectory.')
+                continue
+
             global_mean_down /= np.linalg.norm(global_mean_down)
             global_mean_position /= num_valid_frames
         
