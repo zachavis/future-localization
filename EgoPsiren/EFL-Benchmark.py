@@ -133,6 +133,7 @@ if __name__ == "__main__":
     #loc = r'H:\fut_loc\20150401_walk_00\traj_prediction.txt'
 
     folder_path = 'S:\\fut_loc\\test\\20150402_grocery\\'#'S:\\synth_marketplace_random2020\\train\\acofre20167850_t38_p18\\' #acofre20167850_t36_p9\\'    #'S:\\fut_loc\\train\\20150401_walk_00\\' #'S:\\fut_loc\\test\\20150402_walk\\'#20150419_ikea #       
+    #folder_path = 'S:\\11f247e0-179a-4b9d-8244-16fb918010a1_0\\'
 
     # load calibration
     print('loading calibration file')
@@ -205,7 +206,7 @@ if __name__ == "__main__":
     vTR = ReadTraj(traj_data_file)
 
 
-    initial_offset = 38#15#45
+    initial_offset = 0#38#15#45
     for iFrame in range(initial_offset,69):
 
         print("GETTING", iFrame)

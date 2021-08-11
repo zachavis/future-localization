@@ -52,7 +52,8 @@ class Plane:
         n_points = pts.shape[0]
         best_eq = []
         best_inliers = []
-
+        print("\tMax angle deflection:",max_angle_deflection)
+        num_best_planes = 0 # count times ransac found better plane
         for it in range(maxIteration):
 
             # Samples 3 random points 
@@ -77,10 +78,11 @@ class Plane:
 
             
             ### But first, let's see if there's a prior to satisfy
-            if normal_prior is not None:
+            if True and normal_prior is not None:
                 result = vecC @ normal_prior
                 if result < 0:
                     vecC *= -1 # flip to same side of plane as normal prior
+                result = vecC @ normal_prior # recalculate dot product to get acute angle
                 deflection = np.arccos(result) # Assuming both are normal
                 if deflection > max_angle_deflection:
                     continue
@@ -99,9 +101,13 @@ class Plane:
             if(len(pt_id_inliers) > len(best_inliers)):
                 best_eq = plane_eq
                 best_inliers = pt_id_inliers
+                num_best_planes += 1
+                print("\t Best deflection:",np.arccos(best_eq[:-1]@normal_prior))
             self.inliers = best_inliers
             self.equation = best_eq
 
+        print("\tWinning plane deflection:",np.arccos(best_eq[:-1]@normal_prior))
+        print("\tRansac successes:",num_best_planes,"/",maxIteration)
         return self.equation, self.inliers
 
 #vtR = {}
@@ -370,7 +376,7 @@ def PrintHelp():
 
 if __name__ == "__main__":
     print('Preparing to reconstruct trajectories!')
-    PRINT_DEBUG_IMAGES = False and not USING_LINUX
+    PRINT_DEBUG_IMAGES = True and not USING_LINUX
     READ_ARGS = True
 
     data_file = 'S:\\structure_0001800_00.txt' #'S:\\fut_loc\\20150401_walk_00\\traj_prediction.txt'
@@ -404,6 +410,7 @@ if __name__ == "__main__":
 
     if READ_ARGS:
         #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
+        sys.argv[1:] = "--data S:/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/ego4d_benchmark --images im --length 100 --stride 20".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -514,26 +521,42 @@ if __name__ == "__main__":
 
             # PROCESS THE TRAJECTORY AND ADD IT TO A LIST
                 
-            global_mean_down = np.zeros(3)
+            global_trajectory_displacement = np.zeros(3)
+            global_trajectory_displacement = frames[valid_frames[-1]]['C'] - frames[valid_frames[0]]['C']
+            global_trajectory_forward = global_trajectory_displacement / np.linalg.norm(global_trajectory_displacement)
+            global_mean_down = np.zeros(3) # this axis is unstable over even many frames
+            global_mean_right = np.zeros(3) # this axis is more stable over many frames
             num_valid_frames = len(valid_frames)
             global_mean_position = np.zeros(3)
             for i in range(num_valid_frames):
-                thisR = frames[valid_frames[i]]['R']
+                thisR = frames[valid_frames[i]]['R'] # 0 is X (right) 1 is Y (down) 2 is Z (forward)
                 thisdown = thisR[1]
+                thisright = thisR[0]
                 thisC = frames[valid_frames[i]]['C']
                 global_mean_down += thisdown
                 global_mean_position += thisC
+                global_mean_right += thisright
 
             
             if num_valid_frames == 0:
                 print('There are no valid frames for this trajectory.')
                 continue
-
+            
             global_mean_down /= np.linalg.norm(global_mean_down)
+            global_mean_right /= np.linalg.norm(global_mean_right)
             global_mean_position /= num_valid_frames
+
+
+            # Now, using the mean right vector and the displacement vector, generate an estimate for the gravity vector
+            # this is because the trajectory and right axis should form a plane parallel with the ground
+            global_trajectory_down = np.cross(global_trajectory_forward,global_mean_right)
+            global_trajectory_down /= np.linalg.norm(global_trajectory_down)
+
+            print("Down vector estimate difference:",global_mean_down,"-",global_trajectory_down,"=",global_mean_down-global_trajectory_down)
         
             if USE_GLOBAL_MEAN_DOWN and not USE_MEAN_DOWN:
-                world_down = global_mean_down
+                #world_down = global_mean_down
+                world_down = global_trajectory_down
 
 
 
@@ -577,7 +600,7 @@ if __name__ == "__main__":
                 print('Point cloud contains (', X_.shape[1], ') points below the camera.')
 
             PlaneSeg = Plane()
-            best_eq, plane_inliers = PlaneSeg.fit(X_.T, 0.6,20,1000,-world_down, np.pi/12.0)
+            best_eq, plane_inliers = PlaneSeg.fit(X_.T, 0.5,20,1000,-world_down, np.pi/12.0)
 
             #inliers_logical = np.zeros(X_.shape[1], dtype=bool)
             #inliers_logical[best_inliers]=True
@@ -833,6 +856,9 @@ if __name__ == "__main__":
                     #X_ = X_ - plane_normal_with_metric[:,None]
 
 
+
+
+
                     X_ = X_aligned_cam - plane_normal_with_metric_aligned_cam[:,None]
                     X_ = X_[:,X_[2] > 0]
                     x = calib['K'] @ X_
@@ -856,7 +882,7 @@ if __name__ == "__main__":
 
 
 
-                    test_x, test_z  = np.meshgrid(np.linspace(-3,3,7),np.linspace(1,8,8))
+                    test_x, test_z  = np.meshgrid(np.linspace(-2,2,5),np.linspace(1,6,6))
                     x = test_x.flatten()
                     z = test_z.flatten()
 
@@ -874,9 +900,30 @@ if __name__ == "__main__":
             
                     #coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
                     #coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
-                    coords_3D -= plane_normal_with_metric_aligned_cam
-            
-                    pixels = P @ coords_3D.T
+
+
+                    
+                    r_y = -plane_normal_with_metric_aligned_cam
+
+                    v = X_aligned_cam[:,-1] - X_aligned_cam[:,0] #tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+                    v /= np.linalg.norm(v)
+                    #if v @ np.array([0,0,1]) > .2:
+                    #    old_r_z = v
+                    #else:
+                    #    print("\tSkipping because of alignment severity")
+                    #    continue
+                    old_r_z = v #np.array([0,0,1])
+                    r_z = old_r_z - (old_r_z@r_y)*r_y
+                    r_z /= np.linalg.norm(r_z)
+                    r_x = np.cross(r_y, r_z)
+
+                    R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
+
+
+                    coords_3D_aligned_cam =  R_rect_ego.T @ coords_3D.T #cameraRotation.T @
+                    coords_3D = coords_3D_aligned_cam - plane_normal_with_metric_aligned_cam[:,None]
+                    #calib['K'] @ cameraRotation
+                    pixels = calib['K'] @ coords_3D #@ cameraRotation
                     pixels /= pixels[2]
                     pixels = pixels[:2]
                     grid_dis = Distort(pixels,calib['omega'],calib['K'])
@@ -927,8 +974,10 @@ if __name__ == "__main__":
                     #axes[0].plot(x_dis_struct[0,just_below], x_dis_struct[1,just_below], 'gx', alpha=.9, markersize = 1.0)#, markersize = 2.0)
        
        
-                    axes[0].plot(x_dis[0], x_dis[1], 'b')#, markersize = 2.0)
+                    axes[0].plot(x_dis[0,:20], x_dis[1,:20], 'b')#, markersize = 2.0)
                     axes[0].plot(x_dis[0], x_dis[1], 'co', markersize = 2.0)
+                    axes[0].plot(x_dis[0,19:40], x_dis[1,19:40], 'r')#, markersize = 2.0)
+                    axes[0].plot(x_dis[0,39:], x_dis[1,39:], 'b')#, markersize = 2.0)
                     
                     axes[0].plot(grid_dis[0], grid_dis[1], 'yo', markersize = 4.0)
                     
