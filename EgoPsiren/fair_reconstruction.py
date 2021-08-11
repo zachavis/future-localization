@@ -52,7 +52,7 @@ class Plane:
         n_points = pts.shape[0]
         best_eq = []
         best_inliers = []
-        print("\tMax angle deflection:",max_angle_deflection)
+        #print("\tMax angle deflection:",max_angle_deflection)
         num_best_planes = 0 # count times ransac found better plane
         for it in range(maxIteration):
 
@@ -102,7 +102,7 @@ class Plane:
                 best_eq = plane_eq
                 best_inliers = pt_id_inliers
                 num_best_planes += 1
-                print("\t Best deflection:",np.arccos(best_eq[:-1]@normal_prior))
+                #print("\t Best deflection:",np.arccos(best_eq[:-1]@normal_prior))
             self.inliers = best_inliers
             self.equation = best_eq
 
@@ -410,7 +410,7 @@ if __name__ == "__main__":
 
     if READ_ARGS:
         #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
-        sys.argv[1:] = "--data S:/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/ego4d_benchmark --images im --length 100 --stride 20".split()
+        #sys.argv[1:] = "--data S:/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/ego4d_benchmark --images im --length 100 --stride 20".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -493,8 +493,8 @@ if __name__ == "__main__":
             reconstruction_folder = Path('reconstruction{:07d}'.format(starting_frame))
             print("Reading Calibration...")
             calib = ReadCalibration(__data_source / __data_images / Path('calib_fisheye.txt'))
-            print('K:',calib['K'])
-            print('omega:',calib['omega'])
+            #print('K:',calib['K'])
+            #print('omega:',calib['omega'])
 
             cameras_path = __data_source / reconstruction_folder / Path('camera.txt')
 
@@ -516,8 +516,14 @@ if __name__ == "__main__":
             for key in range( mean_start, mean_start + num_frames ):
                 if key in frames:
                     valid_frames.append(key)
+                    
+            num_valid_frames = len(valid_frames)
+            #print("Number of valid frames:",num_valid_frames)
 
-            print(len(valid_frames))
+            
+            if num_valid_frames == 0:
+                print('There are no valid frames for this trajectory.')
+                continue
 
             # PROCESS THE TRAJECTORY AND ADD IT TO A LIST
                 
@@ -526,7 +532,6 @@ if __name__ == "__main__":
             global_trajectory_forward = global_trajectory_displacement / np.linalg.norm(global_trajectory_displacement)
             global_mean_down = np.zeros(3) # this axis is unstable over even many frames
             global_mean_right = np.zeros(3) # this axis is more stable over many frames
-            num_valid_frames = len(valid_frames)
             global_mean_position = np.zeros(3)
             for i in range(num_valid_frames):
                 thisR = frames[valid_frames[i]]['R'] # 0 is X (right) 1 is Y (down) 2 is Z (forward)
@@ -538,9 +543,6 @@ if __name__ == "__main__":
                 global_mean_right += thisright
 
             
-            if num_valid_frames == 0:
-                print('There are no valid frames for this trajectory.')
-                continue
             
             global_mean_down /= np.linalg.norm(global_mean_down)
             global_mean_right /= np.linalg.norm(global_mean_right)
