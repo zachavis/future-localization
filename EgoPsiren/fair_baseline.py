@@ -203,7 +203,7 @@ if __name__ == "__main__":
 
     # load calibration
     print('loading calibration file')
-    calibfile = __data_source / Path('calib_fisheye.txt')
+    calibfile = __data_source / __data_images / Path('calib_fisheye.txt')
 
     fid = open(calibfile)
     #data = textscan(fid, '%s %f', 9);

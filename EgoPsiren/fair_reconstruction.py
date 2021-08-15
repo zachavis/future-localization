@@ -9,6 +9,10 @@ USING_LINUX = platform == "linux" or platform == "linux2"
 
 if not USING_LINUX:
     import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D, art3d
+    from matplotlib.patches import Circle, Ellipse
+    #from mpl_toolkits.mplot3d import Axes3D
+    from vispy import app, visuals, scene
     #from matplotlib import image
 
 
@@ -410,7 +414,7 @@ if __name__ == "__main__":
 
     if READ_ARGS:
         #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
-        #sys.argv[1:] = "--data S:/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/ego4d_benchmark --images im --length 100 --stride 20".split()
+        sys.argv[1:] = "--data S:/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/ego4d_benchmark --images im --length 100 --stride 20".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -525,19 +529,27 @@ if __name__ == "__main__":
                 print('There are no valid frames for this trajectory.')
                 continue
 
+            all_points = np.zeros((len(valid_frames[:]),3))
+            count = 0
+            for key in valid_frames[1:]:
+                #print('Frame:',key)
+                all_points[count] = frames[key]['C']
+                count += 1
+
+
             # PROCESS THE TRAJECTORY AND ADD IT TO A LIST
                 
             global_trajectory_displacement = np.zeros(3)
-            global_trajectory_displacement = frames[valid_frames[-1]]['C'] - frames[valid_frames[0]]['C']
+            global_trajectory_displacement = np.copy(frames[valid_frames[-1]]['C']) - np.copy(frames[valid_frames[0]]['C'])
             global_trajectory_forward = global_trajectory_displacement / np.linalg.norm(global_trajectory_displacement)
             global_mean_down = np.zeros(3) # this axis is unstable over even many frames
             global_mean_right = np.zeros(3) # this axis is more stable over many frames
             global_mean_position = np.zeros(3)
             for i in range(num_valid_frames):
-                thisR = frames[valid_frames[i]]['R'] # 0 is X (right) 1 is Y (down) 2 is Z (forward)
+                thisR = np.copy(frames[valid_frames[i]]['R']) # 0 is X (right) 1 is Y (down) 2 is Z (forward)
                 thisdown = thisR[1]
                 thisright = thisR[0]
-                thisC = frames[valid_frames[i]]['C']
+                thisC = np.copy(frames[valid_frames[i]]['C'])
                 global_mean_down += thisdown
                 global_mean_position += thisC
                 global_mean_right += thisright
@@ -547,6 +559,7 @@ if __name__ == "__main__":
             global_mean_down /= np.linalg.norm(global_mean_down)
             global_mean_right /= np.linalg.norm(global_mean_right)
             global_mean_position /= num_valid_frames
+            global_mean_position = np.mean(all_points,axis=0)
 
 
             # Now, using the mean right vector and the displacement vector, generate an estimate for the gravity vector
@@ -602,7 +615,7 @@ if __name__ == "__main__":
                 print('Point cloud contains (', X_.shape[1], ') points below the camera.')
 
             PlaneSeg = Plane()
-            best_eq, plane_inliers = PlaneSeg.fit(X_.T, 0.5,20,1000,-world_down, np.pi/12.0)
+            best_eq, plane_inliers = PlaneSeg.fit(X_.T, 1.0,20,1000,-world_down, np.pi/12.0)
 
             #inliers_logical = np.zeros(X_.shape[1], dtype=bool)
             #inliers_logical[best_inliers]=True
@@ -645,13 +658,13 @@ if __name__ == "__main__":
 
                 # PROCESS THE TRAJECTORY AND ADD IT TO A LIST
 
-                cameraCenter = frames[valid_frames[0]]['C']
-                cameraRotation = frames[valid_frames[0]]['R']
+                cameraCenter = np.copy(frames[valid_frames[0]]['C'])
+                cameraRotation = np.copy(frames[valid_frames[0]]['R'])
 
                 mean_down = np.zeros(3)
                 num_valid_frames = len(valid_frames)
                 for i in range(num_valid_frames):
-                    thisR = frames[valid_frames[i]]['R']
+                    thisR = np.copy(frames[valid_frames[i]]['R'])
                     thisdown = thisR[1]
                     mean_down += thisdown
                 mean_down /= np.linalg.norm(mean_down)
@@ -691,7 +704,7 @@ if __name__ == "__main__":
                     X_ = X_[:,just_below]
 
                     PlaneSeg = Plane()
-                    best_eq, plane_inliers = PlaneSeg.fit(X_.T, 0.5,20,1000,-world_down, np.pi/12.0)
+                    best_eq, plane_inliers = PlaneSeg.fit(X_.T, 1.0,20,1000,-world_down, np.pi/12.0)
 
                     best_inliers = plane_inliers
 
@@ -764,6 +777,7 @@ if __name__ == "__main__":
 
 
                 x = calib['K'] @ X_
+                X_main_structure = X_
         
                 x /= x[2]
                 x = x[:2]
@@ -778,10 +792,13 @@ if __name__ == "__main__":
                 current_distance_to_ground = np.abs(best_eq[3] / np.linalg.norm(plane_normal))
                 corrective_scalar = __AVERAGE_HUMAN_HEIGHT / current_distance_to_ground
                 plane_normal_with_metric = plane_normal * __AVERAGE_HUMAN_HEIGHT / np.linalg.norm(plane_normal)
+                plane_normal_with_metric = -world_down * __AVERAGE_HUMAN_HEIGHT / np.linalg.norm(world_down)
+
+
                 check = np.linalg.norm(plane_normal_with_metric)
 
 
-        
+                # asdfasdfasdf
                 points = np.zeros((len(valid_frames[1:]),3))
                 count = 0
                 for key in valid_frames[1:]:
@@ -789,11 +806,11 @@ if __name__ == "__main__":
                     points[count] = frames[key]['C']
                     count += 1
 
-                #points +=  np.ones(points.shape)*downscaler*down[None] + np.ones(points.shape)*rightscaler*right[None] + np.ones(points.shape)*forwardscaler*forward[None]
+                ##points +=  np.ones(points.shape)*downscaler*down[None] + np.ones(points.shape)*rightscaler*right[None] + np.ones(points.shape)*forwardscaler*forward[None]
 
 
 
-                X = points.T
+                X = np.copy(points.T)
                 bigC = np.ones((3,X.shape[1]))
                 bigC = cameraCenter[:,None] * bigC
                 X_ = X-bigC
@@ -884,7 +901,7 @@ if __name__ == "__main__":
 
 
 
-                    test_x, test_z  = np.meshgrid(np.linspace(-2,2,5),np.linspace(1,6,6))
+                    test_x, test_z  = np.meshgrid(np.linspace(-2,2,5),np.linspace(1,20,20))
                     x = test_x.flatten()
                     z = test_z.flatten()
 
@@ -942,58 +959,332 @@ if __name__ == "__main__":
                     #img[:,:] = 1
 
 
+                    if True:
+                        # 2D plot
+                        fig, ax = plt.subplots(1,1)
+                        axes = [ax]
+                        axes[0].imshow(img)
+                        #axes[0].plot(0,0, 'ro', markersize = 10.0)
+                        #axes[0].plot(calib['K'][0,2],calib['K'][1,2], 'ro', markersize = 10.0)
+                        pix_d = np.zeros((len(valid_frames[1:]),3))
+                        start_key = valid_frames[0]
+                        #count = 0
+                        #for key in valid_frames[1:]:
+                        #    camera_center = frames[key]['C']
+                        #    camera_center[1] = .7
+                        #    pix_d[count] = ProjectWithDistortion(calib['omega'],calib['K'],frames[start_key]['R'],frames[start_key]['C'],camera_center)
+                        #   # if frames.has_key()
 
-                    fig, ax = plt.subplots(1,1)
-                    axes = [ax]
-                    axes[0].imshow(img)
-                    #axes[0].plot(0,0, 'ro', markersize = 10.0)
-                    #axes[0].plot(calib['K'][0,2],calib['K'][1,2], 'ro', markersize = 10.0)
-                    pix_d = np.zeros((len(valid_frames[1:]),3))
-                    start_key = valid_frames[0]
-                    #count = 0
-                    #for key in valid_frames[1:]:
-                    #    camera_center = frames[key]['C']
-                    #    camera_center[1] = .7
-                    #    pix_d[count] = ProjectWithDistortion(calib['omega'],calib['K'],frames[start_key]['R'],frames[start_key]['C'],camera_center)
-                    #   # if frames.has_key()
-
-                    #    #pix_d[count] = ProjectWithDistortion(calib['omega'],calib['K'],np.eye(3),np.zeros(3),points[count])
-                    #    count += 1
-                    #    #pix_u = calib['K'] @ points[i]
-                    #    #pix_d = cv.fisheye
+                        #    #pix_d[count] = ProjectWithDistortion(calib['omega'],calib['K'],np.eye(3),np.zeros(3),points[count])
+                        #    count += 1
+                        #    #pix_u = calib['K'] @ points[i]
+                        #    #pix_d = cv.fisheye
 
 
         
-                    #in_front = np.where(pix_d[:,2] > 0)
-                    #pix_front = pix_d[in_front]
-                    #ys = pix_front[:,1]
-                    #xs = pix_front[:,0]
-                    #axes[0].plot(x_dis_struct[0], x_dis_struct[1], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
+                        #in_front = np.where(pix_d[:,2] > 0)
+                        #pix_front = pix_d[in_front]
+                        #ys = pix_front[:,1]
+                        #xs = pix_front[:,0]
+                        #axes[0].plot(x_dis_struct[0], x_dis_struct[1], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
 
-                    axes[0].plot(x_dis_struct[0], x_dis_struct[1], 'rx', alpha=.5, markersize = 0.3)#, markersize = 2.0)
-                    #axes[0].plot(x_dis_struct[0,just_else], x_dis_struct[1,just_else], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
-                    axes[0].plot(x_dis_struct[0,best_inliers], x_dis_struct[1,best_inliers], 'gx', alpha=.7, markersize = 1.0)#, markersize = 2.0)
-                    #axes[0].plot(x_dis_struct[0,just_below], x_dis_struct[1,just_below], 'gx', alpha=.9, markersize = 1.0)#, markersize = 2.0)
+                        axes[0].plot(x_dis_struct[0], x_dis_struct[1], 'rx', alpha=.5, markersize = 0.3)#, markersize = 2.0)
+                        #axes[0].plot(x_dis_struct[0,just_else], x_dis_struct[1,just_else], 'rx', alpha=.5, markersize = 0.5)#, markersize = 2.0)
+                        axes[0].plot(x_dis_struct[0,best_inliers], x_dis_struct[1,best_inliers], 'gx', alpha=.7, markersize = 1.0)#, markersize = 2.0)
+                        #axes[0].plot(x_dis_struct[0,just_below], x_dis_struct[1,just_below], 'gx', alpha=.9, markersize = 1.0)#, markersize = 2.0)
        
        
-                    axes[0].plot(x_dis[0,:20], x_dis[1,:20], 'b')#, markersize = 2.0)
-                    axes[0].plot(x_dis[0], x_dis[1], 'co', markersize = 2.0)
-                    axes[0].plot(x_dis[0,19:40], x_dis[1,19:40], 'r')#, markersize = 2.0)
-                    axes[0].plot(x_dis[0,39:], x_dis[1,39:], 'b')#, markersize = 2.0)
+                        axes[0].plot(x_dis[0,:20], x_dis[1,:20], 'b')#, markersize = 2.0)
+                        axes[0].plot(x_dis[0], x_dis[1], 'co', markersize = 2.0)
+                        axes[0].plot(x_dis[0,19:40], x_dis[1,19:40], 'r')#, markersize = 2.0)
+                        axes[0].plot(x_dis[0,39:], x_dis[1,39:], 'b')#, markersize = 2.0)
                     
-                    axes[0].plot(grid_dis[0], grid_dis[1], 'yo', markersize = 4.0)
+                        #axes[0].wireframe(grid_dis[0], grid_dis[1], 'k',)
                     
+                        axes[0].plot(grid_dis[0], grid_dis[1], 'mo', markersize = 8.0)
+                    
+
+
+                    
+                        #plt.show()
+
+
+
+
+
+
+                    ## build your visuals, that's all
+                    #Scatter3D = scene.visuals.create_visual_node(visuals.MarkersVisual)
+
+                    ## The real-things : plot using scene
+                    ## build canvas
+                    #canvas = scene.SceneCanvas(keys='interactive', bgcolor='w', show=True)
+
+
+
+                    ## Add a ViewBox to let the user zoom/rotate
+                    #view = canvas.central_widget.add_view()
+                    #view.camera = 'turntable'
+                    #view.camera.fov = 45
+                    #view.camera.distance = 500
+
+
+                    # 3D plot
+                    fig, ax = plt.subplots(1,1,subplot_kw={"projection": "3d"})
+                    axes = [ax]
+                    
+                    axes[0].set_xlabel('X axis')
+                    axes[0].set_ylabel('Z axis')
+                    axes[0].set_zlabel('Y axis')
+
+
+                    
+                    X_ = np.copy(all_points.T) #*corrective_scalar
+                    #X_mean = np.mean(X_,axis=1)
+                    X_ = X_-global_mean_position[:,None]#-X_[:,0,None]
+                    #test2 = np.mean(X_,axis=1)
+                    PC = point_cloud['XYZ']-global_mean_position[:,None] #*corrective_scalar# - X_[:,0,None]
+                    BL = below_logical[::10]
+
+                    PCBL = PC[:,below_logical]
+                    PCBL_IN = PCBL[:,best_inliers]
+                    PC = PC[:,::10]
+                    PCBL_IN = PCBL_IN[:,::10]
+
+
+
+                    
+                    r_y = world_down
+
+                    v = X_[:,-1] - X_[:,0] #tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+                    v /= np.linalg.norm(v)
+                    #if v @ np.array([0,0,1]) > .2:
+                    #    old_r_z = v
+                    #else:
+                    #    print("\tSkipping because of alignment severity")
+                    #    continue
+                    old_r_z = np.array([0,0,1]) #v
+                    r_z = old_r_z - (old_r_z@r_y)*r_y
+                    r_z /= np.linalg.norm(r_z)
+                    r_x = np.cross(r_y, r_z)
+                    
+                    R_rect_world_down = np.stack((r_x,r_y,r_z),axis=0)
+
+                    #X_[:,-1] - X_[:,0]
+
+                    def align_vectors(a, b):
+                        b = b / np.linalg.norm(b) # normalize a
+                        a = a / np.linalg.norm(a) # normalize b
+                        v = np.cross(a, b)
+                        # s = np.linalg.norm(v)
+                        c = np.dot(a, b)
+
+                        v1, v2, v3 = v
+                        h = 1 / (1 + c)
+
+                        Vmat = np.array([[0, -v3, v2],
+                                      [v3, 0, -v1],
+                                      [-v2, v1, 0]])
+
+                        R = np.eye(3, dtype=np.float64) + Vmat + (Vmat.dot(Vmat) * h)
+                        return R
+
+
+                    #r_z = global_trajectory_forward
+
+                    #old_r_y = np.array([0,1,0])
+                    #r_y = old_r_y - (old_r_y @ r_z) * r_z
+                    #r_y /= np.linalg.norm(r_y)
+                    #r_x = np.cross(r_y,r_z)
+                    
+                    #R_rect_world_forward = np.stack((r_x,r_y,r_z),axis=0)
+
+
+                    test_x, test_z  = np.meshgrid(np.linspace(-6,6,13),np.linspace(-6,6,13))
+                    x = test_x.flatten()
+                    z = test_z.flatten()
+                    coords_3D = np.zeros((len(z),3))
+                    coords_3D[:,0] = x
+                    coords_3D[:,2] = z
+                    
+                    #r_y = -plane_normal_with_metric_aligned_cam
+
+                    #v = X_aligned_cam[:,-1] - X_aligned_cam[:,0] #tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+                    #v /= np.linalg.norm(v)
+                    ##if v @ np.array([0,0,1]) > .2:
+                    ##    old_r_z = v
+                    ##else:
+                    ##    print("\tSkipping because of alignment severity")
+                    ##    continue
+                    #old_r_z = v #np.array([0,0,1])
+                    #r_z = old_r_z - (old_r_z@r_y)*r_y
+                    #r_z /= np.linalg.norm(r_z)
+                    #r_x = np.cross(r_y, r_z)
+
+                    #R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
+
+                    #r_y = world_down
+
+                    #v = X_aligned_cam[:,-1] - X_aligned_cam[:,0] #tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+                    #v /= np.linalg.norm(v)
+                    ##if v @ np.array([0,0,1]) > .2:
+                    ##    old_r_z = v
+                    ##else:
+                    ##    print("\tSkipping because of alignment severity")
+                    ##    continue
+                    #old_r_z = v
+                    #r_z = old_r_z - (old_r_z@r_y)*r_y
+                    #r_z /= np.linalg.norm(r_z)
+                    #r_x = np.cross(r_y, r_z)
+                    
+                    #R_rect_world_down2 = np.stack((r_x,r_y,r_z),axis=0)
+
+
+
+
+
+
+
+                    test_points = np.zeros((3,2))
+                    test_points[:,1] = np.array([0,0,10])
+
+                    R_rect_world_down = align_vectors(world_down,np.array([0,-1,0])) #np.eye(3) #
+
+                    R_rect_y2z = align_vectors(np.array([0,-1,0]),np.array([0,0,-1])) #np.eye(3) #
+
+                    #test_points_aligned = R_rect_world_forward @ test_points
+
+                    
+                    world_aligned_X_ =  R_rect_y2z @ R_rect_world_down @ X_ #
+
+                    world_aligned_PC_ = R_rect_y2z @ R_rect_world_down @  PC #
+
+                    
+                    world_aligned_PCBL_IN_ =  R_rect_y2z @ R_rect_world_down @ PCBL_IN #
+
+
+
+                    R_plane_rotate = align_vectors(np.array([0,1,0]),v)
+                    R_plane_bump = align_vectors(world_down,best_eq[:-1])
+                    #R_plane_bump = align_vectors(np.array([0,1,0]),best_eq[:-1])
+                    #@ R_plane_bump.T
+                    #plane_coords = (R_rect_y2z  @ coords_3D.T * 4) + world_aligned_X_[:,0,None] + (R_rect_y2z @ best_eq[:-1]*best_eq[3])[:,None]   #+ X_[:,0,None]
+                    plane_coords = (R_rect_y2z  @ R_plane_bump @ coords_3D.T * 4) + (R_rect_y2z @ best_eq[:-1]*best_eq[3])[:,None]# + world_aligned_X_[:,0,None]   #+ X_[:,0,None]
+
+
+                    plane_coords_up = plane_coords + (R_rect_y2z @ best_eq[:-1]*1)[:,None]   #+ X_[:,0,None]
+                    plane_coords_down = plane_coords - (R_rect_y2z @ best_eq[:-1]*1)[:,None]   #+ X_[:,0,None]
+
+                    plane_coords_world_down = (R_rect_y2z @ coords_3D.T * 4) + (R_rect_y2z @ -world_down*best_eq[3])[:,None]
+
+                    #x = np.zeros(n_frames)
+                    #y = np.zeros(n_frames)
+                    #z = np.zeros(n_frames)
+                    #count = 0
+                    #for key in valid_frames:
+                    #    C = frames[key]['C']
+                    #    x[count] = C[0]
+                    #    y[count] = C[1]
+                    #    z[count] = C[2]
+                    #    count += 1
+                    
+                    x = np.copy(world_aligned_X_[0])
+                    y = np.copy(world_aligned_X_[1])
+                    z = np.copy(world_aligned_X_[2])
+
+                    #q = frames['C'][:n_frames]
+                    #x = frames['C'][:n_frames,0]
+                    #y = frames['C'][:n_frames,1]
+                    #z = frames['C'][:n_frames,2]
+                    max_range = np.array([x.max()-x.min(), y.max()-y.min(), z.max()-z.min()]).max() * 3 # / 2.0
+
+                    mean_x = 0#x.mean()
+                    mean_y = 0#y.mean()
+                    mean_z = 0#z.mean()
+                    axes[0].set_xlim(mean_x - max_range, mean_x + max_range)
+                    axes[0].set_ylim(mean_y - max_range, mean_y + max_range)
+                    axes[0].set_zlim(mean_z - max_range, mean_z + max_range)
+                    
+
+
+
+                    #axes[0].scatter(X_[0],X_[1],X_[2],marker='o',)
+                    #axes[0].scatter(world_aligned_X_[0],world_aligned_X_[1],world_aligned_X_[2],marker='o',c='green',s=2)
+                    axes[0].scatter3D(world_aligned_X_[0,:20],world_aligned_X_[1,:20],world_aligned_X_[2,:20],marker='o',c='black',s=1)
+                    axes[0].scatter3D(world_aligned_X_[0,19:],world_aligned_X_[1,19:],world_aligned_X_[2,19:],marker='o',c='green',s=2)
+
+
+                    
+                    #axes[0].scatter3D(world_aligned_PCBL_IN_[0],world_aligned_PCBL_IN_[1],world_aligned_PCBL_IN_[2],marker='o',c='magenta',s=1)
+                    axes[0].scatter3D(world_aligned_PC_[0,BL],world_aligned_PC_[1,BL],world_aligned_PC_[2,BL],marker='o',c='orange',alpha=.5,s=.5)
+                    axes[0].scatter3D(world_aligned_PC_[0,~BL],world_aligned_PC_[1,~BL],world_aligned_PC_[2,~BL],marker='o',c='red',alpha=.5,s=.5)
+                    ##axes[0].scatter3D(world_aligned_PC_[0],world_aligned_PC_[1],world_aligned_PC_[2],marker='o',c='red',s=1)
+                    
+                    ##axes[0].scatter(plane_coords[0],plane_coords[1],plane_coords[2],marker='o',c='black',s=2)
+                    ##axes[0].plot_wireframe(plane_coords[0], plane_coords[1], plane_coords[2], color='black')
+                    
+                    
+                    axes[0].plot_trisurf(plane_coords[0], plane_coords[1], plane_coords[2], linewidth=10, color=(0,0,0,.2), antialiased=False)
+                    axes[0].plot_trisurf(plane_coords_world_down[0], plane_coords_world_down[1], plane_coords_world_down[2], linewidth=10, color=(0,0,1,.2), antialiased=False)
+                    #axes[0].plot_trisurf(plane_coords_up[0], plane_coords_up[1], plane_coords_up[2], linewidth=10, color=(1,0,0,.5), antialiased=False)
+                    #axes[0].plot_trisurf(plane_coords_down[0], plane_coords_down[1], plane_coords_down[2], linewidth=10, color=(1,0,0,.5), antialiased=False)
+                    
+                    
+                    axes[0].plot3D(world_aligned_X_[0,:20],world_aligned_X_[1,:20],world_aligned_X_[2,:20],'m',markersize=2)
+                    axes[0].plot3D(world_aligned_X_[0,19:],world_aligned_X_[1,19:],world_aligned_X_[2,19:],'b',markersize=2)
+                    print(np.linalg.norm(best_eq[:-1]))
+                    #axes[0].scatter(test_points[0],test_points[1],test_points[2],marker='o',)
+                    #axes[0].scatter(test_points_aligned[0],test_points_aligned[1],test_points_aligned[2],marker='o',c='green')
+
+                    #axes[0] = plt.axes(projection='3d')
+
+                    #def add_point(ax, x, y, z, fc = None, ec = None, radius = 1.0):
+                    #   xy_len, z_len = ax.get_figure().get_size_inches()
+                    #   axis_length = [x[1] - x[0] for x in [ax.get_xbound(), ax.get_ybound(), ax.get_zbound()]]
+                    #   axis_rotation =  {'z': ((x, y, z), axis_length[1]/axis_length[0]),
+                    #                     'y': ((x, z, y), axis_length[2]/axis_length[0]*xy_len/z_len),
+                    #                     'x': ((y, z, x), axis_length[2]/axis_length[1]*xy_len/z_len)}
+                    #   for a, ((x0, y0, z0), ratio) in axis_rotation.items():
+                    #       p = Ellipse((x0, y0), width = radius, height = radius*ratio, fc=fc, ec=ec)
+                    #       ax.add_patch(p)
+                    #       art3d.pathpatch_2d_to_3d(p, z=z0, zdir=a)
+
+                    #for i in range(len(world_aligned_PC_[0])):
+                    #    add_point(axes[0],world_aligned_PC_[0,i],world_aligned_PC_[1,i],world_aligned_PC_[2,i])
+
+
+
+
 
                     plt.show()
 
 
+                    ## Add a ViewBox to let the user zoom/rotate
+                    #view = canvas.central_widget.add_view()
+                    #view.camera = 'turntable'
+                    #view.camera.fov = 45
+                    #view.camera.distance = 100
 
 
+                    #xax = scene.Axis(pos=[[-100, 0], [100, 0]], domain=(-100,100), tick_direction=(0, -1), axis_label = 'x', axis_color='r', tick_color='r', text_color='r', font_size=16, parent=view.scene)
+                    #yax = scene.Axis(pos=[[0, 0], [0, 1]], tick_direction=(-1, 0), axis_label = 'y', axis_color='g', tick_color='g', text_color='g', font_size=16, parent=view.scene)
+
+                    #zax = scene.Axis(pos=[[0, 0], [-1, 0]], tick_direction=(0, -1), axis_label = 'z', axis_color='b', tick_color='b', text_color='b', font_size=16, parent=view.scene)
+                    #zax.transform = scene.transforms.MatrixTransform()  # its acutally an inverted xaxis
+                    #zax.transform.rotate(90, (0, 1, 0))  # rotate cw around yaxis
+                    #zax.transform.rotate(-45, (0, 0, 1))  # tick direction towards (-1,-1)
+
+                    ## plot ! note the parent parameter
+                    #p1 = Scatter3D(parent=view.scene)
+                    #p1.set_gl_state('translucent', blend=True, depth_test=True)
+                    ##p1.set_data(pos, face_color=colors, symbol='o', size=10,
+                    ##            edge_width=0.5, edge_color='blue')
+                    #p1.set_data(test_points.T, symbol='o', size=5,
+                    #            edge_width=0.5, edge_color='blue')
 
 
-
-
-
+                    
+                    #app.run()
 
 
 
