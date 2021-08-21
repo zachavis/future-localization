@@ -414,7 +414,7 @@ if __name__ == "__main__":
 
     if READ_ARGS:
         #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
-        sys.argv[1:] = "--data S:/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/ego4d_benchmark --images im --length 100 --stride 20".split()
+        sys.argv[1:] = "--data S:/fair_baseline_test/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/fair_baseline_test/ego4d_benchmark --images im --length 100 --stride 20".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -799,9 +799,11 @@ if __name__ == "__main__":
 
 
                 # asdfasdfasdf
-                points = np.zeros((len(valid_frames[1:]),3))
+                # Changed from 1 to zero
+                temp_start = 0 # 1
+                points = np.zeros((len(valid_frames[temp_start:]),3))
                 count = 0
-                for key in valid_frames[1:]:
+                for key in valid_frames[temp_start:]:
                     #print('Frame:',key)
                     points[count] = frames[key]['C']
                     count += 1
@@ -845,7 +847,7 @@ if __name__ == "__main__":
                 __trajectory_buffer[traj_start] = {}
                 __trajectory_buffer[traj_start]['XYZ'] = X_aligned_cam
                 __trajectory_buffer[traj_start]['up'] = plane_normal_with_metric_aligned_cam
-
+                __trajectory_buffer[traj_start]['time'] = np.array(valid_frames[temp_start:],dtype=np.int) - traj_start
 
 
 
@@ -1311,12 +1313,13 @@ if __name__ == "__main__":
 
         traj = __trajectory_buffer[key]['XYZ']
         world_up = __trajectory_buffer[key]['up']
+        times = __trajectory_buffer[key]['time']
 
         
         trajectory_test.write('{id} {upx} {upy} {upz} {tlen} '.format(id=frame_id, upx=world_up[0], upy=world_up[1], upz=world_up[2], tlen=traj.shape[1]))
 
         for i in range(traj.shape[1]):
-            trajectory_test.write('{t} {x} {y} {z} {d1} {d2} '.format(t=i, x=traj[0,i], y=traj[1,i], z=traj[2,i], d1=0, d2=0))
+            trajectory_test.write('{t} {x} {y} {z} {d1} {d2} '.format(t=times[i], x=traj[0,i], y=traj[1,i], z=traj[2,i], d1=0, d2=0))
         
         trajectory_test.write('\n')
 
