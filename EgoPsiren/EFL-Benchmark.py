@@ -206,7 +206,7 @@ if __name__ == "__main__":
     vTR = ReadTraj(traj_data_file)
 
 
-    initial_offset = 0#38#15#45
+    initial_offset = 38#15#45
     for iFrame in range(initial_offset,69):
 
         print("GETTING", iFrame)
@@ -792,8 +792,8 @@ if __name__ == "__main__":
             CAMERA_BASELINE = .1 # meters
             CAMERA_FOCAL = 0.015
 
-            clipped_disp = np.clip(disp_img,0,20)
-            distance_estimate = np.clip(np.reciprocal(clipped_disp)* 50,0,50) # * CAMERA_BASELINE * CAMERA_FOCAL, 0, 10)
+            clipped_disp = np.clip(disp_img,0,50)
+            distance_estimate = np.clip(np.reciprocal(clipped_disp)* 35,0,10) # * CAMERA_BASELINE * CAMERA_FOCAL, 0, 10)
 
 
 
@@ -843,17 +843,22 @@ if __name__ == "__main__":
 
 
 
+            fig, ax = plt.subplots(1,1)
+            axes = [ax]
+
+            axes[0].set_title('Alignment Image')
+            resized_disp = cv2.resize(disp_img, (img.shape[1], img.shape[0]))
+            tempval = axes[0].imshow(img * resized_disp[:,:,None])
 
 
-
-            fig, axes = plt.subplots(1,2)
+            fig, axes = plt.subplots(2,2)
             #axes = [ax]
             
             #plt.imsave('bigegomap.png',img2)
-            axes[0].set_title('Disparity Image')
+            axes[0,0].set_title('Disparity Image')
              #axes[3].plot(t, logr, 'r')
 
-            tempval = axes[0].imshow(clipped_disp)
+            tempval = axes[0,0].imshow(clipped_disp)
 
             
             cax = fig.add_axes([0.1, .95, .4, .05])
@@ -861,18 +866,49 @@ if __name__ == "__main__":
 
 
 
-            axes[1].set_title('Distance Image')
+            axes[0,1].set_title('Height Image')
             #tempval = axes[1].imshow(distafromcam)
-            tempval = axes[1].imshow(distcheck, cmap='tab20c')
+            tempval = axes[0,1].imshow(distcheck, cmap='tab20c')
 
             
             cax = fig.add_axes([.53, .95, .4, .05])
             fig.colorbar(tempval, cax, orientation='horizontal')
+
             
+            axes[0,0].set_title('Disparity Image')
+             #axes[3].plot(t, logr, 'r')
+
+            tempval = axes[0,0].imshow(clipped_disp)
+
+            
+            axes[0,1].set_title('Distance Image')
+            tempval = axes[1,0].imshow(distafromcam)
+            #tempval = axes[0,1].imshow(distcheck, cmap='tab20c')
+
+            axes[1,1].set_title('Original Image')
+            tempval = axes[1,1].imshow(img)
+            
+
+            fig, axes = plt.subplots(1,2)
+            #axes = [ax]
+            distcheck_res = cv2.resize(distcheck, (img.shape[1], img.shape[0]))
+            distcheck_mask = np.copy(distcheck_res)
+            #distcheck_mask = cv2.resize(distcheck_mask, (img.shape[1], img.shape[0]))
+            distcheck_mask[distcheck_res < .5] = 1
+            distcheck_mask[distcheck_res > .5] = 0
+            
+            axes[0].set_title('Mask Image')
+            tempval = axes[0].imshow(distcheck_mask)
+
+            
+            axes[1].set_title('Masked Image')
+            tempval = axes[1].imshow(img * distcheck_mask[:,:,None])
+
+
 
             plt.show()
 
-
+            continue # just for displaying stuff in meeting
 
 
 
