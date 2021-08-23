@@ -382,6 +382,8 @@ if __name__ == "__main__":
     print('Preparing to reconstruct trajectories!')
     PRINT_DEBUG_IMAGES = True and not USING_LINUX
     READ_ARGS = True
+    RANSAC_ITERS = 10000
+    #PEEK_FIRST = True
 
     data_file = 'S:\\structure_0001800_00.txt' #'S:\\fut_loc\\20150401_walk_00\\traj_prediction.txt'
 
@@ -414,7 +416,9 @@ if __name__ == "__main__":
 
     if READ_ARGS:
         #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
-        sys.argv[1:] = "--data S:/fair_baseline_test/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/fair_baseline_test/ego4d_benchmark --images im --length 100 --stride 20".split()
+        #sys.argv[1:] = "--data S:/fair_baseline_test/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/fair_baseline_test/ego4d_benchmark --images im --length 100 --stride 20".split()
+        
+        sys.argv[1:] = "--data S:/FAIR_subset/11f247e0-179a-4b9d-8244-16fb918010a1_3/ --output S:/FAIR_subset/11f247e0-179a-4b9d-8244-16fb918010a1_3/ --images image --length 150 --stride 10".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -478,9 +482,11 @@ if __name__ == "__main__":
     USE_GLOBAL_MEAN_DOWN = True
     USE_MEAN_DOWN = False #True
 
-
     # Loop over reconstruction folders
     for folder_path in __data_source.iterdir(): #next(os.walk(partial_folder_path))[1]:
+            PEAK_FIRST = True
+            PEAK_IMG_COUNTER = 0
+            PEAK_IMG_COUNTER_CHECK = 20
             if not folder_path.is_dir():
                 print('skipping',folder_path,'...')
                 continue
@@ -615,7 +621,7 @@ if __name__ == "__main__":
                 print('Point cloud contains (', X_.shape[1], ') points below the camera.')
 
             PlaneSeg = Plane()
-            best_eq, plane_inliers = PlaneSeg.fit(X_.T, 1.0,20,1000,-world_down, np.pi/12.0)
+            best_eq, plane_inliers = PlaneSeg.fit(X_.T, 1.0,20,RANSAC_ITERS,-world_down, np.pi/12.0)
 
             #inliers_logical = np.zeros(X_.shape[1], dtype=bool)
             #inliers_logical[best_inliers]=True
@@ -629,7 +635,6 @@ if __name__ == "__main__":
 
             
                 
-                    
             # Loop over frames with given stride and trajlength
             traj_start = starting_frame
             while traj_start + __trajLength < starting_frame + num_frames:
@@ -637,7 +642,7 @@ if __name__ == "__main__":
 
                 
                 if not traj_start in frames: # make sure this frame is okay
-                    traj_start += __trajStride # Next trajectory TODO: Should this just increment by 1 or something?
+                    traj_start += 1 #__trajStride # Next trajectory TODO: Should this just increment by 1 or something?
                     continue
 
                 # Get all valid frames in trajLength sequence
@@ -704,7 +709,7 @@ if __name__ == "__main__":
                     X_ = X_[:,just_below]
 
                     PlaneSeg = Plane()
-                    best_eq, plane_inliers = PlaneSeg.fit(X_.T, 1.0,20,1000,-world_down, np.pi/12.0)
+                    best_eq, plane_inliers = PlaneSeg.fit(X_.T, 1.0,20,RANSAC_ITERS,-world_down, np.pi/12.0)
 
                     best_inliers = plane_inliers
 
@@ -800,7 +805,7 @@ if __name__ == "__main__":
 
                 # asdfasdfasdf
                 # Changed from 1 to zero
-                temp_start = 0 # 1
+                temp_start = 1 # 1
                 points = np.zeros((len(valid_frames[temp_start:]),3))
                 count = 0
                 for key in valid_frames[temp_start:]:
@@ -852,8 +857,12 @@ if __name__ == "__main__":
 
 
 
-
-                if PRINT_DEBUG_IMAGES:
+                
+                PEAK_IMG_COUNTER += 1
+                if PEAK_IMG_COUNTER == PEAK_IMG_COUNTER_CHECK:
+                    PEAK_FIRST = True
+                if PRINT_DEBUG_IMAGES and PEAK_FIRST:
+                    PEAK_FIRST = False
                      #points = np.zeros((len(valid_frames[1:]),3))
                     #count = 0
                     #for key in valid_frames[1:]:
@@ -923,8 +932,8 @@ if __name__ == "__main__":
                     #coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
 
 
-                    
-                    r_y = -plane_normal_with_metric_aligned_cam
+                    # TODO: THIS SHOULD BE UNIT!!!! FIX THIS
+                    r_y = -plane_normal_with_metric_aligned_cam/np.linalg.norm(plane_normal_with_metric_aligned_cam)
 
                     v = X_aligned_cam[:,-1] - X_aligned_cam[:,0] #tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
                     v /= np.linalg.norm(v)
@@ -955,6 +964,11 @@ if __name__ == "__main__":
                     print('projection stuff')
                     img_dir = __data_source / __data_images / Path('image{:07d}.jpg'.format(traj_start)) #file_path+'\\image\\image{:07d}.jpg'.format(start_frame)
 
+                    if not img_dir.is_file():
+                        print('Frame does not exist at', img_dir)
+                        traj_start += 1
+                        continue
+
                     img_dir_str = str(img_dir.resolve())
                     img = cv2.imread(img_dir_str)
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float64)/255.0
@@ -965,6 +979,8 @@ if __name__ == "__main__":
                         # 2D plot
                         fig, ax = plt.subplots(1,1)
                         axes = [ax]
+                        
+                        axes[0].set_title(full_part + ' frame: ' + str(traj_start))
                         axes[0].imshow(img)
                         #axes[0].plot(0,0, 'ro', markersize = 10.0)
                         #axes[0].plot(calib['K'][0,2],calib['K'][1,2], 'ro', markersize = 10.0)

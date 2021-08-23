@@ -5,6 +5,7 @@ USING_LINUX = platform == "linux" or platform == "linux2"
 
 if not USING_LINUX:
     import matplotlib.pyplot as plt
+    from matplotlib import collections  as mc
     #from matplotlib import image
 
 
@@ -129,9 +130,12 @@ def Undistort(x, omega, K):
 ## # Camera Info
 
 if __name__ == "__main__":
-    print('Preparing to train on image/trajectory pairs!')
+    print('Preparing to test on image/trajectory pairs!')
     PRINT_DEBUG_IMAGES = True and not USING_LINUX
     READ_ARGS = True
+
+    TOTAL_ERROR = []
+    TOTAL_FIRSTSECOND_ERROR = []
 
     ego_pixel_shape_Alex = (256,256)
 
@@ -165,7 +169,7 @@ if __name__ == "__main__":
 
     __trajectory_buffer = {} # key is the frame, and a trajectory is a list of: [1D time instance, 3D point, 2D dummy var] 
     __id2feature_buffer = {} # key is frame, and AlexNet feature is val 
-    __id2traj_buffer = {} # key is frame, and traj is val 
+    __id2traj_buffer = {} # key is frame, and traj is val
 
     model_Alex = torch.hub.load('pytorch/vision:v0.9.0', 'alexnet', pretrained=True)
     model_Alex.eval() # IMPORTANT!!
@@ -194,10 +198,16 @@ if __name__ == "__main__":
 
 
 
+
+
+
+
+
+
     #/11f247e0-179a-4b9d-8244-16fb918010a1_0
     if READ_ARGS:
         #sys.argv[1:] = "--data S:/fair_baseline_test --output S:/fair_baseline_test --images im --length 100 --stride 20".split()
-        sys.argv[1:] = "--data S:/FAIR_subset/train --output S:/FAIR_subset --images image --length 150 --stride 10".split()
+        sys.argv[1:] = "--data S:/FAIR_subset/test --output S:/FAIR_subset --images image --length 150 --stride 10".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -242,6 +252,26 @@ if __name__ == "__main__":
                 PrintHelp()
                 sys.exit(-1)
 
+
+
+
+
+    
+
+    knnPickle = open(__data_target / Path('knn_alexfeats_FAIR.knn'),'rb')
+    KNN = pickle.load(knnPickle)
+    knnPickle.close()
+
+
+    #'knn_traintraj_aligned.dict'
+    #'knn_traintraj_aligned_synth.dict'
+    #knn_traintraj_aligned_synth_FIXED
+    #knn_traintraj_aligned_full_FIXED
+    dictPickle = open(__data_target / Path('knn_traintraj_aligned_FAIR.dict'),'rb')
+    __id2traj_buffer = pickle.load(dictPickle)
+    __id2traj_buffer_KEYS = list(__id2traj_buffer.keys())
+    temp = len(__id2traj_buffer_KEYS)
+    dictPickle.close()
 
     for folder_path in __data_source.iterdir(): #next(os.walk(partial_folder_path))[1]:
         if not folder_path.is_dir():
@@ -354,7 +384,7 @@ if __name__ == "__main__":
             
 
 
-            print('\t\tTrajectory contains',len(tr['XYZ'][1]),'points.')
+            print('\t\tGT Trajectory contains',len(tr['XYZ'][1]),'points.')
             img = cv2.cvtColor(cv2.imread(str(im)), cv2.COLOR_BGR2RGB).astype(np.float64)/255.0
             #disp_img = np.genfromtxt(disp, delimiter=',')[:,:-1] #np.loadtxt(disp, delimiter=',')
         
@@ -527,38 +557,218 @@ if __name__ == "__main__":
             img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
 
              
-            pos_and_time = np.vstack((tr_ground_OG,tr['frame']))
-            __id2traj_buffer[unique_id] = pos_and_time #tr_ground
+            pos_and_time = np.vstack((tr_ground_OG,tr['frame'])) # ground truth
+            #__id2traj_buffer[unique_id] = pos_and_time #tr_ground
 
 
             img_channel_swap_unsqueezed = torch.unsqueeze(torch.from_numpy(img_channel_swap),0)
 
             returns = model_Alex(img_channel_swap_unsqueezed)
             feature = activation['classifier.4']
-            __id2feature_buffer[unique_id] = feature[0].numpy()
+            #__id2feature_buffer[unique_id] = feature[0].numpy()
+            test_feature = feature.numpy()
+            dist, idx = KNN.kneighbors(test_feature)
+            # TODO move this down to have the smallest error image
+            print("/t/tThe closest image to",unique_id,"is",__id2traj_buffer_KEYS[idx[0][0]])
+            
+            best_traj_OG2 = []
+            best_traj_ground2 = []
+            #best_error_list = []
+            best_error = np.inf
+            best_fserror = np.inf
 
+            all_traj = {}
+
+            best_neighbor = -1
+
+            for n in range(5):
+
+                tr_ground_OG2 = __id2traj_buffer[__id2traj_buffer_KEYS[idx[0][n]]][:-1,:]
+            
+                tr_ground2 = K_data @ R_rect @ tr_ground_OG2;
+        
+                #if False: #Do we need this?
+                #    if np.any(tr_ground[2,:]<0):
+                #        tr_ground[:2,:] = np.nan
+                ##tr_ground(tr_ground(3,:)<0, :) = NaN;
+                ##tr_ground = bsxfun(@rdivide, tr_ground(1:2,:), tr_ground(3,:));
+        
+        
+                tr_ground2 = tr_ground2[:2] / tr_ground2[2]
+
+                tr_times2 = __id2traj_buffer[__id2traj_buffer_KEYS[idx[0][n]]][-1,:]
+                tr_times = tr['frame']
+
+
+                # measurement
+                t = 0
+                error = []
+                firstseconderror = []
+
+                #count = 0
+                while t < __trajLength:
+                    try:
+                        idx1 = np.where(tr_times == t)[0][0]
+                        idx2 = np.where(tr_times2 == t)[0][0]
+                    except:
+                        t += 1
+                        continue
+                    #if idx1 < len(tr_times) and idx2 < len(tr_times)
+                    dist = np.linalg.norm(tr_ground_OG[:,idx1] - tr_ground_OG2[:,idx2])
+                    error.append(dist)
+                    if t < 30:
+                        firstseconderror.append(dist)
+                    #count += 1
+                    t += 1
+                error = np.array(error)
+                print("\taverage error is ", np.mean(error), "median error is", np.median(error))
+                print("\tfirst second average error is ", np.mean(firstseconderror), "median error is", np.median(firstseconderror))
+
+                if np.mean(error) < best_error:
+                    best_error = np.mean(error)
+                    best_fserror = np.mean(firstseconderror)
+                    best_traj_OG2 = tr_ground_OG2
+                    best_traj_ground2 = tr_ground2
+                    best_neighbor = n
+
+                all_traj[n] = tr_ground2
+            
+            TOTAL_ERROR.append(best_error)
+            TOTAL_FIRSTSECOND_ERROR.append(best_fserror)
+            
+            
             testing = feature[0].numpy()
 
 
-            if False:
+            if True:
+
+
+
+
+
+                test_x, test_z  = np.meshgrid(np.linspace(-50,50,101),np.linspace(-50,50,101))
+                x = test_x.flatten()
+                z = test_z.flatten()
+
+                #z,x = Polar2Coord(test_t,test_r) # x,z ?
+                #print(z)
+                #print(x)
+
+                #print('actual z:', test_r[0], '*', 'np.cos(',test_t[0],') =', test_r[0] * np.cos(test_t[0]))
+                #print('actual x:', test_r[0], '*', 'np.sin(',test_t[0],') =', test_r[0] * np.sin(test_t[0]))
+
+                coords_3D = np.zeros((len(z),3))
+                coords_3D[:,0] = x
+                coords_3D[:,2] = z
+            
+            
+                #coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+                #coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+
+
+                    
+                r_y = -tr['up']/np.linalg.norm(tr['up'])
+
+                v = tr_ground_OG[:,-1] - tr_ground_OG[:,0] #tr['XYZ'][:,0]/np.linalg.norm(tr['XYZ'][:,0])
+                v /= np.linalg.norm(v)
+                #if v @ np.array([0,0,1]) > .2:
+                #    old_r_z = v
+                #else:
+                #    print("\tSkipping because of alignment severity")
+                #    continue
+                old_r_z = v #np.array([0,0,1])
+                r_z = old_r_z - (old_r_z@r_y)*r_y
+                r_z /= np.linalg.norm(r_z)
+                r_x = np.cross(r_y, r_z)
+
+                R_rect_ego = np.stack((r_x,r_y,r_z),axis=0)
+
+
+                coords_3D_aligned_cam =  R_rect_ego.T @ coords_3D.T #cameraRotation.T @
+                coords_3D = coords_3D_aligned_cam - tr['up'][:,None]
+                #calib['K'] @ cameraRotation
+                grid_pixels = K_data @ coords_3D #@ cameraRotation
+                grid_pixels /= grid_pixels[2]
+                grid_pixels = grid_pixels[:2]
+
+                front_coords = coords_3D[2,:]>.1
+                
+                plane_mask = np.reshape(front_coords, test_x.shape)
+                plane_indices = np.reshape(np.arange(len(front_coords)), test_x.shape)
+
+
+                horizontal_lines = []
+                for r in range(plane_indices.shape[0]):
+                    for c in range(plane_indices.shape[1]-1):
+                        if plane_mask[r,c] and plane_mask[r,c+1]: # if these points are visible
+                            idx1 = plane_indices[r,c]
+                            idx2 = plane_indices[r,c+1]
+                            coord_tuple = [grid_pixels[:,idx1], grid_pixels[:,idx2]]
+                            horizontal_lines.append(coord_tuple)
+
+                vertical_lines = []
+                for c in range(plane_indices.shape[1]):
+                    for r in range(plane_indices.shape[0]-1):
+                        if plane_mask[r,c] and plane_mask[r+1,c]: # if these points are visible
+                            idx1 = plane_indices[r,c]
+                            idx2 = plane_indices[r+1,c]
+                            coord_tuple = [grid_pixels[:,idx1], grid_pixels[:,idx2]]
+                            vertical_lines.append(coord_tuple)
+
+
+
+                
+                fig_height = 6
                 # DISPLAY IMAGES
-                fig, ax = plt.subplots(1,1)#, figsize=(18,6))
+                fig, ax = plt.subplots(1,1,figsize=(fig_height  * 16.0/9.0, fig_height ))#, figsize=(18,6))
                 axes = [ax] # only use if there's 1 column
+
+                #plt.tick_params(
+                #    axis='x',          # changes apply to the x-axis
+                #    which='both',      # both major and minor ticks are affected
+                #    bottom=False,      # ticks along the bottom edge are off
+                #    top=False,         # ticks along the top edge are off
+                #    labelbottom=False) # labels along the bottom edge are off
+                
+                #plt.tick_params(
+                #    axis='y',          # changes apply to the x-axis
+                #    which='both',      # both major and minor ticks are affected
+                #    bottom=False,      # ticks along the bottom edge are off
+                #    top=False,         # ticks along the top edge are off
+                #    labelbottom=False) # labels along the bottom edge are off
+                plt.axis('off')
 
                 #newBoundsx = (crowdBoundsX[0], 2*crowdBoundsX[1])
                 #fig.set_size_inches(16, 24)
-                axes[0].set_title(str(len(tr['XYZ'][1])) + '-frame trajectory in ' + vFilename[iFrame])
                 #axes[0].set_xlim(*newBoundsx)
                 #axes[0].set_ylim(*crowdBoundsY)
         
                 axes[0].set_xlim(0,img.shape[1])
                 axes[0].set_ylim(img.shape[0],0)
                 axes[0].set_aspect(1)
-                axes[0].imshow(img_resized)
-                axes[0].plot(tr_ground[0,:20], tr_ground[1,:20], colored_part[iFrame % 3])
-                axes[0].plot(tr_ground[0,19:40], tr_ground[1,19:40], colored_part[(iFrame +1) % 3])
-                axes[0].plot(tr_ground[0,39:], tr_ground[1,39:], colored_part[(iFrame +2) % 3])
+                axes[0].imshow(img_undistorted)
+                #axes[0].plot(tr_ground[0,:20], tr_ground[1,:20], colored_part[iFrame % 3])
+                #axes[0].plot(tr_ground[0,19:40], tr_ground[1,19:40], colored_part[(iFrame +1) % 3])
+                #axes[0].plot(tr_ground[0,39:], tr_ground[1,39:], colored_part[(iFrame +2) % 3])
+                
+                axes[0].plot(tr_ground[0,:], tr_ground[1,:], colored_part[0])
                 axes[0].plot(tr_ground[0], tr_ground[1], 'k.', markersize=1)
+
+                
+                #axes[0].plot(tr_ground[0,:20], tr_ground[1,:20], colored_part[iFrame % 3])
+                #axes[0].plot(tr_ground[0,19:40], tr_ground[1,19:40], colored_part[(iFrame +1) % 3])
+                #axes[0].plot(tr_ground[0,39:], tr_ground[1,39:], colored_part[(iFrame +2) % 3])
+
+                #axes[0].plot(tr_ground2[0], tr_ground2[1], 'w')
+                #axes[0].plot(tr_ground2[0], tr_ground2[1], 'k.', markersize=1)
+
+
+                for key in all_traj.keys():
+                    color = 'w'
+                    if key == best_neighbor:
+                        color = 'r'
+                    axes[0].plot(all_traj[key][0], all_traj[key][1], color)
+                    axes[0].plot(all_traj[key][0], all_traj[key][1], 'k.', markersize=1)
 
 
                 #axes[2].set_title('Rectified image')
@@ -567,57 +777,126 @@ if __name__ == "__main__":
                 #axes[0].set_aspect(1)
 
                 #homography = K_data @ R_rect @ np.linalg.inv(K_data)
-                plt.show()
+                
+                #axes[0].plot(grid_pixels[0], grid_pixels[1], 'mo', markersize = 8.0)
+                hlc = mc.LineCollection(horizontal_lines,colors='m',linewidths=1)
+                vlc = mc.LineCollection(vertical_lines,colors='m',linewidths=1)
+                axes[0].add_collection(hlc)
+                axes[0].add_collection(vlc)
+                ##fig, axes = plt.subplots(1,5)#, figsize=(18,6))
+                ##plt.savefig(__data_target / Path('presentation_images') / Path(Path(vFilename[iFrame]).stem+'_1.jpg'), dpi=100)
+                plt.savefig(__data_target / Path('presentation_images') / Path(Path(vFilename[iFrame]).stem+'_2.jpg'), dpi=200)
+                ##plt.savefig(__data_target / Path('presentation_images') / Path(Path(vFilename[iFrame]).stem+'_3.jpg'), dpi=300)
+                axes[0].set_title(str(len(tr['XYZ'][1])) + '-frame trajectory in ' + vFilename[iFrame])
+                
 
 
-            print('\t\tDescriptors so far:',len(__id2feature_buffer))
+                fig_height = 3
+                plot_aspect_ratio = 8/2
+                fig = plt.figure(figsize=(fig_height  * plot_aspect_ratio, fig_height ))
+                plt.tight_layout()
+                gs = fig.add_gridspec(2,8)
+                axes = [fig.add_subplot(gs[:, :4]),
+                        fig.add_subplot(gs[0, 4:6]),
+                        fig.add_subplot(gs[0, 6:]),
+                        fig.add_subplot(gs[1, 4:6]),
+                        fig.add_subplot(gs[1, 6:]),]
+                gs.update(wspace=0.025, hspace=0.025)
+                for i in range(5):
+                    axes[i].axis('off')
+
+
+
+                peon_idx = 0
+                for key in all_traj.keys():
+                    fileID = Path(__id2traj_buffer_KEYS[idx[0][key]])
+                    fileName = fileID.name
+                    fileParent = fileID.parent
+                    filepath = __data_target / Path('train') / fileParent /__data_images / fileName
+                    knnimg = cv2.cvtColor(cv2.imread(str(filepath)), cv2.COLOR_BGR2RGB).astype(np.float64)/255.0
+                    #knnimg = cv2.imread(str(filepath))
+                    offset = 1 + peon_idx
+                    if key == best_neighbor:
+                        offset = 0
+                    else:
+                        peon_idx += 1
+                    axes[offset].set_xlim(0,knnimg.shape[1])
+                    axes[offset].set_ylim(knnimg.shape[0],0)
+                    axes[offset].set_aspect(1)
+                    #peon_idx +=1
+
+                    #all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(knnimg.shape[0]) for j in range(knnimg.shape[1]) ], dtype=np.float32).T
+                    #all_pixel_coords_undistorted = Distort(all_pixel_coords,omega,K_data)
+
+                    #pix_part2 = np.copy(all_pixel_coords_undistorted)
+                    #pix_part2[0] = all_pixel_coords_undistorted[1]
+                    #pix_part2[1] = all_pixel_coords_undistorted[0]
+                    #rowmaj_pixels[:2].T
+
+                    img_undistorted = interpolate.interpn( (range(knnimg.shape[0]),range(knnimg.shape[1])), knnimg, pix_part2[:2].T , method = 'linear',bounds_error = False, fill_value = 0).astype(np.float32).reshape(knnimg.shape[0], knnimg.shape[1],3)
+
+
+                    axes[offset].imshow(img_undistorted)
+
+                
+                ##plt.savefig(__data_target / Path('presentation_images') / Path(Path(vFilename[iFrame]).stem+'_KNN1.jpg'), dpi=100)
+                plt.savefig(__data_target / Path('presentation_images') / Path(Path(vFilename[iFrame]).stem+'_KNN2.jpg'), dpi=200)
+                ##plt.savefig(__data_target / Path('presentation_images') / Path(Path(vFilename[iFrame]).stem+'_KNN3.svg'), dpi=300)
+                #plt.show()
+
+
+            #print('\t\tDescriptors so far:',len(__id2feature_buffer))
             #print('framekill')
         print('\tDone with folder',folder_name)
     
+    
+    print("Total average error is ", np.mean(TOTAL_ERROR), "median error is", np.median(TOTAL_ERROR))
+    print("Total first second average error is ", np.mean(TOTAL_FIRSTSECOND_ERROR), "median error is", np.median(TOTAL_FIRSTSECOND_ERROR))
+
 
     # Finally, let's train the KNN classifier and save the data.
-    print('Building descriptors buffer...')
-    descriptors = np.zeros((len(__id2feature_buffer.keys()),4096))
+    #print('Building descriptors buffer...')
+    #descriptors = np.zeros((len(__id2feature_buffer.keys()),4096))
 
-    i = 0
-    for frame in __id2traj_buffer.keys():
+    #i = 0
+    #for frame in __id2traj_buffer.keys():
 
-        #img = torch.unsqueeze(torch.from_numpy(__id2feature_buffer[frame]),0)
+    #    #img = torch.unsqueeze(torch.from_numpy(__id2feature_buffer[frame]),0)
 
-        #returns = model(img)
-        #feature = activation['classifier.4']
-        descriptors[i] = __id2feature_buffer[frame] #feature[0].numpy()
-        i += 1
+    #    #returns = model(img)
+    #    #feature = activation['classifier.4']
+    #    descriptors[i] = __id2feature_buffer[frame] #feature[0].numpy()
+    #    i += 1
 
         
-    print('Fitting KNN...')
-    knn = NearestNeighbors(n_neighbors = 5).fit(descriptors)
+    #print('Fitting KNN...')
+    #knn = NearestNeighbors(n_neighbors = 5).fit(descriptors)
 
 
-    if False: # Skip sanity check
-        # Sanity check
-        #testimg = torch.unsqueeze(torch.from_numpy( __id2traj_buffer[list(__id2traj_buffer.keys())[1]]),0)
-        #returns = model_Alex(testimg)
-        #feature = activation['classifier.4']
+    #if False: # Skip sanity check
+    #    # Sanity check
+    #    #testimg = torch.unsqueeze(torch.from_numpy( __id2traj_buffer[list(__id2traj_buffer.keys())[1]]),0)
+    #    #returns = model_Alex(testimg)
+    #    #feature = activation['classifier.4']
     
-        feat = __id2feature_buffer[list(__id2feature_buffer.keys())[3]]
-        feat = np.expand_dims(feat, 0)
-        dist, idx = knn.kneighbors(feat)
+    #    feat = __id2feature_buffer[list(__id2feature_buffer.keys())[3]]
+    #    feat = np.expand_dims(feat, 0)
+    #    dist, idx = knn.kneighbors(feat)
 
 
-        #check = np.array(list(RESIZED_IMAGE_DICTIONARY_TR.keys())) == np.array(list(LOG_POLAR_TRAJECTORY_DICTIONARY_TR.keys()))
+    #    #check = np.array(list(RESIZED_IMAGE_DICTIONARY_TR.keys())) == np.array(list(LOG_POLAR_TRAJECTORY_DICTIONARY_TR.keys()))
 
-        nearest_feature = __id2traj_buffer[list(__id2traj_buffer.keys())[idx[0,0]]]
+    #    nearest_feature = __id2traj_buffer[list(__id2traj_buffer.keys())[idx[0,0]]]
        
-    knnPath = __data_target / Path('knn_alexfeats_FAIR.knn')
-    knnPickle = open(knnPath,'wb')
-    pickle.dump(knn,knnPickle)
-    knnPickle.close()
+    #knnPath = __data_target / Path('knn_alexfeats_FAIR.knn')
+    #knnPickle = open(knnPath,'wb')
+    #pickle.dump(knn,knnPickle)
+    #knnPickle.close()
     
-    dictPath = __data_target / Path('knn_traintraj_aligned_FAIR.dict')
-    dictPickle = open(dictPath,'wb')
-    pickle.dump(__id2traj_buffer,dictPickle)
-    dictPickle.close()
+    #dictPath = __data_target / Path('knn_traintraj_aligned_FAIR.dict')
+    #dictPickle = open(dictPath,'wb')
+    #pickle.dump(__id2traj_buffer,dictPickle)
+    #dictPickle.close()
 
     print("Conclusion.")
 
