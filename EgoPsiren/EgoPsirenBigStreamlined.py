@@ -150,8 +150,9 @@ import getopt
 from pathlib import Path
 
 
-PRINT_DEBUG_IMAGES = False and not USING_LINUX
+PRINT_DEBUG_IMAGES = True and not USING_LINUX
 LOAD_NETWORK_FROM_DISK = False
+LOAD_DEPTH_IMAGES = True
 #np.seterr(invalid='raise')
 USE_EGO = True
 
@@ -252,29 +253,35 @@ if __name__ == "__main__":
 
     # LOADING VARIABLES
     RESIZED_IMAGE_DICTIONARY = {} # could probably pre-allocate this into a big numpy array...
+    RESIZED_DEPTH_IMAGE_DICTIONARY = {}
     LOG_POLAR_TRAJECTORY_DICTIONARY = {}
     COORD_TRAJECTORY_DICTIONARY = {}
     PIXEL_TRAJECTORY_DICTIONARY = {}
-
+    
     RAW_IMAGE_DICTIONARY = {}
+    RAW_DEPTH_IMAGE_DICTIONARY = {}
     TRAJ_IN_IMAGE_DICTIONARY = {}
 
     # Testing VARIABLES
     RESIZED_IMAGE_DICTIONARY_TE = {} # could probably pre-allocate this into a big numpy array...
+    RESIZED_DEPTH_IMAGE_DICTIONARY_TE = {}
     LOG_POLAR_TRAJECTORY_DICTIONARY_TE = {}
     COORD_TRAJECTORY_DICTIONARY_TE = {}
     PIXEL_TRAJECTORY_DICTIONARY_TE = {}
 
     RAW_IMAGE_DICTIONARY_TE = {}
+    RAW_DEPTH_IMAGE_DICTIONARY_TE = {}
     TRAJ_IN_IMAGE_DICTIONARY_TE = {}
 
     # Training VARIABLES
     RESIZED_IMAGE_DICTIONARY_TR = {} # could probably pre-allocate this into a big numpy array...
+    RESIZED_DEPTH_IMAGE_DICTIONARY_TR = {}
     LOG_POLAR_TRAJECTORY_DICTIONARY_TR = {}
     COORD_TRAJECTORY_DICTIONARY_TR = {}
     PIXEL_TRAJECTORY_DICTIONARY_TR = {}
 
     RAW_IMAGE_DICTIONARY_TR = {}
+    RAW_DEPTH_IMAGE_DICTIONARY_TR = {}
     TRAJ_IN_IMAGE_DICTIONARY_TR = {}
 
 
@@ -285,21 +292,25 @@ if __name__ == "__main__":
 
         if data_subset == 'dummytrain':
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TR
+            RESIZED_DEPTH_IMAGE_DICTIONARY = RESIZED_DEPTH_IMAGE_DICTIONARY_TR
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TR
             COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TR
             PIXEL_TRAJECTORY_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TR
 
             RAW_IMAGE_DICTIONARY = RAW_IMAGE_DICTIONARY_TR
+            RAW_DEPTH_IMAGE_DICTIONARY = RAW_DEPTH_IMAGE_DICTIONARY_TR
             TRAJ_IN_IMAGE_DICTIONARY = TRAJ_IN_IMAGE_DICTIONARY_TR
             
         
         if data_subset == 'dummytest':
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TE
+            RESIZED_DEPTH_IMAGE_DICTIONARY = RESIZED_DEPTH_IMAGE_DICTIONARY_TE
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TE
             COORD_TRAJECTORY_DICTIONARY = COORD_TRAJECTORY_DICTIONARY_TE
             PIXEL_TRAJECTORY_DICTIONARY = PIXEL_TRAJECTORY_DICTIONARY_TE
 
             RAW_IMAGE_DICTIONARY = RAW_IMAGE_DICTIONARY_TE
+            RAW_DEPTH_IMAGE_DICTIONARY = RAW_DEPTH_IMAGE_DICTIONARY_TE
             TRAJ_IN_IMAGE_DICTIONARY = TRAJ_IN_IMAGE_DICTIONARY_TE
 
 
@@ -409,12 +420,28 @@ if __name__ == "__main__":
 
                 #im = sprintf('%sim/%s', folder_path, vFilename{iFrame});
                 im = folder_path / 'im' / str(vFilename[iFrame]) #"{}im\\{}".format(folder_path, vFilename[iFrame])
+                
+                if LOAD_DEPTH_IMAGES:
+                    disp_im =  folder_path / 'disparity' / str(vFilename[iFrame] + '.disp.txt')
+                #disp_im = "{}disparity\\{}{}".format(folder_path, vFilename[iFrame],'.disp.txt')
+
+
 
                 if not os.path.isfile(im): #TODO: Changeme
-                    print('could not find file')
+                    print('could not find image file')
                     continue
 
+
                 img = cv2.cvtColor(cv2.imread(str(im.resolve())), cv2.COLOR_BGR2RGB).astype(np.float64)/255.0
+                
+                
+                if LOAD_DEPTH_IMAGES and not os.path.isfile(disp_im):
+                    print('could not find disparity image file')
+                    continue
+                elif LOAD_DEPTH_IMAGES:
+                    disp_img = np.genfromtxt(disp_im, delimiter=',')[:,:-1]
+
+
                 #cv2.imshow('intermediate',intermediate)
                 #cv2.waitKey()
 
@@ -530,7 +557,15 @@ if __name__ == "__main__":
 
 
 
+                K_data_disp = np.copy(K_data)
+                K_data_disp[0,2] = disp_img.shape[1]/2
+                K_data_disp[1,2] = disp_img.shape[0]/2
 
+            
+                K_data_disp[0,0] = disp_img.shape[1] * K_data[0,0]/img.shape[1]
+                K_data_disp[1,1] = disp_img.shape[0] * K_data[1,1]/img.shape[0]
+
+                
 
 
 
@@ -542,6 +577,88 @@ if __name__ == "__main__":
                 
                 # Generating EgoRetinalMap
                 if USE_EGO:
+
+                    if LOAD_DEPTH_IMAGES:
+                        # Disparity:
+
+
+                        disp_pixels_xform = K_data_disp @ R_rect @ coords_3D.T
+                        disp_pixels_xform /= disp_pixels_xform[2]
+
+                        rowmaj_disp_pixels_xform = np.zeros(disp_pixels_xform.shape)
+                        rowmaj_disp_pixels_xform[0] = disp_pixels_xform[1]
+                        rowmaj_disp_pixels_xform[1] = disp_pixels_xform[0]
+
+
+
+                        disp_pixels_xform = K_data_disp @ R_rect @ coords_3D.T
+                        disp_pixels_xform /= disp_pixels_xform[2]
+
+                        rowmaj_disp_pixels_xform = np.zeros(disp_pixels_xform.shape)
+                        rowmaj_disp_pixels_xform[0] = disp_pixels_xform[1]
+                        rowmaj_disp_pixels_xform[1] = disp_pixels_xform[0]
+
+                        disp_img2 = interpolate.interpn((range(disp_img.shape[0]),range(disp_img.shape[1])),disp_img, rowmaj_pixels2[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(big_ego_pixel_shape[0], big_ego_pixel_shape[1])
+
+                        depth_pixel_coords2 = np.array( [ [j+.5,i+.5,1.0] for i in range(disp_img.shape[0]) for j in range(disp_img.shape[1]) ], dtype=np.float32)
+
+
+                        ### CALCULATE GROUND PLANE AND POINTS ABOVE PLANE
+
+
+                        # Get distance map:
+                        CAMERA_BASELINE = .1 # meters
+                        CAMERA_FOCAL = 0.015
+
+                        clipped_disp = np.clip(disp_img,0,50)
+                        distance_estimate = np.clip(np.reciprocal(clipped_disp)* 35,0,10) # * CAMERA_BASELINE * CAMERA_FOCAL, 0, 10)
+
+
+
+                        # get plane eq
+
+                        p_normal = tr['up']/np.linalg.norm(tr['up'])
+                        p_origin = -tr['up'] #camera assumed to be at 0,0,0
+                        #e_origin = np.zeros(3) #zero vector
+                        e_rays = R_rect.T @ np.linalg.inv(K_data2) @ depth_pixel_coords2.T #+0
+                        e_rays /= np.linalg.norm(e_rays,axis=0)
+                        print('norm:', np.linalg.norm(e_rays[:,100]))
+
+            
+            
+
+                        # get point along ray
+
+                        pts = (e_rays * distance_estimate.flatten()[None]).T #depths[None]
+
+                        points2_dists = np.linalg.norm(pts, axis=1)
+
+                        distafromcam = points2_dists.reshape(disp_img.shape)
+
+
+
+            
+                        plane_eq = np.zeros(4)
+                        plane_eq[:-1] = p_normal
+                        plane_eq[-1] = - p_normal @ p_origin
+
+
+
+
+
+                        # check distance
+                        dist_pt = (plane_eq[0]*pts[:,0]+plane_eq[1]*pts[:, 1]+plane_eq[2]*pts[:, 2]+plane_eq[3])/np.sqrt(plane_eq[0]**2+plane_eq[1]**2+plane_eq[2]**2)
+            
+                        #points2_dists = np.linalg.norm(dist_pt, axis=0)
+
+                        distcheck = np.abs(dist_pt.reshape(disp_img.shape))
+
+
+
+
+
+
+
                     all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ], dtype=np.float32)
                     all_pixel_coords[:,0] = ego_pix2t(all_pixel_coords[:,0])
                     all_pixel_coords[:,1] = ego_pix2r(all_pixel_coords[:,1])
@@ -569,6 +686,13 @@ if __name__ == "__main__":
 
                     img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1],3)
                     img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
+
+
+                    
+
+
+
+
 
 
                 else:

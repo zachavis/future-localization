@@ -418,7 +418,7 @@ if __name__ == "__main__":
         #sys.argv[1:] = "--data S:/ego4d_benchmark/meghan/11500510/REC00002 --output S:/ego4d_benchmark --images image --length 100 --stride 20".split()
         #sys.argv[1:] = "--data S:/fair_baseline_test/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/fair_baseline_test/ego4d_benchmark --images im --length 100 --stride 20".split()
         
-        sys.argv[1:] = "--data S:/FAIR_subset/11f247e0-179a-4b9d-8244-16fb918010a1_3/ --output S:/FAIR_subset/11f247e0-179a-4b9d-8244-16fb918010a1_3/ --images image --length 150 --stride 10".split()
+        sys.argv[1:] = "--data S:/FAIR_subset/train/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --output S:/FAIR_subset/train/11f247e0-179a-4b9d-8244-16fb918010a1_0/ --images image --length 150 --stride 10".split()
         print("Current program args:",sys.argv[1:])
         try:
             opts, args = getopt.getopt(sys.argv[1:],"hvd:i:o:l:s:",["help","verbose","data=","images=","output=","length=","stride="])
@@ -492,7 +492,7 @@ if __name__ == "__main__":
                 continue
             full_part = folder_path.name
             identifier = folder_path.name[:14]
-            if identifier != 'reconstruction':
+            if identifier != 'reconstruction' and identifier != 'xreconstruction':
                 print('skipping',folder_path,'with ID:', identifier, 'is is not reconstruction...')
                 continue
             recon_id = folder_path.name[14:]
