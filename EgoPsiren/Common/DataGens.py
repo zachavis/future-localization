@@ -845,6 +845,97 @@ class MassiveHyperTrajectoryDatasetNEURIPS(torch.utils.data.Dataset):
 
 
 
+class MassiveHyperTrajectoryDatasetWithMask(torch.utils.data.Dataset):
+  'Characterizes a dataset for PyTorch'
+  def __init__(self, trajectories, pixeltrajectories, numItems, recenteringFn, uncenteringFn, img_points, images, height_masks, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
+    'Initialization'
+    
+    self.trajectories = trajectories
+    #self.obstacles = obstacles
+    #self.obstacle_multiplier = multiplier
+    #self.buffer = .1
+    self.recenteringFn = recenteringFn
+    self.uncenteringFn = uncenteringFn
+    self.images = images
+    self.masks = height_masks
+    self.totalpoints = numItems
+    self.masks = height_masks
+
+    self.img_points = img_points.astype(np.float32)
+    self.datascale = 1
+    self.pix2tfn = pix2tfn
+    self.pix2rfn = pix2rfn
+    self.polarfn = polarfn
+
+    self.datalength = len(images)
+    self.width = 1 #.5
+    self.random = random
+
+    self.pixeltrajectories = pixeltrajectories
+
+
+
+  def __len__(self):
+    'Denotes the total number of samples'
+    return self.datalength
+
+  def GetImageTrajectoryPair(self,index):
+      
+    key = list(self.images.keys())[index]
+    
+    if self.random:
+        input = self.uncenteringFn((np.random.rand(self.totalpoints,2)*2.0-1.0).astype(np.float32))
+    else:
+    #random_choice = np.random.choice(len(self.img_points), size=150, replace=False)
+        input = np.copy(self.img_points)
+    xformed_input = np.zeros(input.shape)
+    xformed_input[:,0] = self.pix2tfn(input[:,0])
+    xformed_input[:,1] = np.exp(self.pix2rfn(input[:,1]))
+
+    xformed_input = np.array(self.polarfn(xformed_input[:,0],xformed_input[:,1])).T
+
+    uniform_noise = np.random.random(1)[0]-.5
+
+    xformed_input = xformed_input + uniform_noise
+
+
+    #output = (np.expand_dims(Coords2ValueFast(input,self.trajectories,1),0) / 30).astype(np.float32)Coords2ValueFastWS
+    output = ( np.expand_dims(Coords2ValueFastWS_NEURIPS(xformed_input,{0:self.trajectories[key]},None,None,self.width,self.width),-1) / self.datascale).astype(np.float32)
+
+    
+    output_walkability = ( np.expand_dims(Coords2ValueFastWS_NEURIPS_TIME_INVARIANT(xformed_input,{0:self.trajectories[key]},None,None,self.width/2,self.width/2),-1) / self.datascale).astype(np.float32)
+
+
+    #input = np.expand_dims(input,0)
+
+    traj = self.pixeltrajectories[key]
+    goal_pos = self.recenteringFn( np.array([traj[0][-1],traj[1][-1]]).astype(np.float32) )
+
+
+
+    
+    dsiren_input = self.uncenteringFn((np.random.rand(10000,2)*2.0-1.0).astype(np.float32))
+    dsiren_xformed_input = np.zeros(dsiren_input.shape)
+    dsiren_xformed_input[:,0] = self.pix2tfn(dsiren_input[:,0])
+    dsiren_xformed_input[:,1] = np.exp(self.pix2rfn(dsiren_input[:,1]))
+    dsiren_xformed_input = np.array(self.polarfn(dsiren_xformed_input[:,0],dsiren_xformed_input[:,1])).T
+
+    derivs = Coords2ValueFastWS_NEURIPS_DERIVATIVE(dsiren_xformed_input,{0:self.trajectories[key]},None,None,self.width,self.width)
+    maximumval = np.max(derivs)
+    minimumval = np.min(derivs)
+    dsiren_output_gradients = ( derivs / self.datascale).astype(np.float32) #/np.linalg.norm(derivs,axis=1)[:,None]
+    
+
+    mask_return = None if self.masks is None else self.masks[key]
+    #dsiren_output_gradients = dsiren_output_gradients[:,[1,0]] 
+    return {'img_sparse':self.images[key], 'img_mask':mask_return, 'coords':self.recenteringFn(input), 'derivative_siren':{'coords':self.recenteringFn(dsiren_input) } }, {'field':output, 'walkability':output_walkability, 'gradient':dsiren_output_gradients, 'goal':goal_pos} #self.recenteringFn(input), output #
+
+
+  def __getitem__(self, index):
+    'Generates one sample of data'
+    return self.GetImageTrajectoryPair(index)
+
+
 
 class MassiveHyperTrajectoryDatasetDoubleSiren(torch.utils.data.Dataset):
   'Characterizes a dataset for PyTorch'

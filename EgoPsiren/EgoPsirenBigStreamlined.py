@@ -687,8 +687,8 @@ if __name__ == "__main__":
                         height_im = interpolate.interpn((range(disp_img.shape[0]),range(disp_img.shape[1])), distcheck, rowmaj_disp_pixels_xform[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1])
                         
                         img_height_mask = np.zeros(height_im.shape)
-                        img_height_mask[height_im > .5] = 1
-                        img_height_mask[height_im < .5] = 0
+                        img_height_mask[height_im > .5] = 0
+                        img_height_mask[height_im < .5] = 1
 
 
 
@@ -869,7 +869,7 @@ if __name__ == "__main__":
                     RAW_IMAGE_DICTIONARY[dictionary_index] = img
             
                 RESIZED_IMAGE_DICTIONARY[dictionary_index] = img_channel_swap
-                RESIZED_DEPTH_IMAGE_DICTIONARY[dictionary_index] = img_height_mask
+                RESIZED_DEPTH_IMAGE_DICTIONARY[dictionary_index] = img_height_mask.astype(np.float32)
                 PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 COORD_TRAJECTORY_DICTIONARY[dictionary_index] = []
@@ -975,10 +975,17 @@ if __name__ == "__main__":
         #hyper_trajectory_data_set = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
 
-        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR, RESIZED_DEPTH_IMAGE_DICTIONARY_TR, ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        #hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR, RESIZED_DEPTH_IMAGE_DICTIONARY_TR, ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        ##i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
+
+        #hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE, RESIZED_DEPTH_IMAGE_DICTIONARY_TE, ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        ##i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
+
+
+        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDatasetWithMask(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR, RESIZED_DEPTH_IMAGE_DICTIONARY_TR, ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
 
-        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE, RESIZED_DEPTH_IMAGE_DICTIONARY_TE, ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDatasetWithMask(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE, RESIZED_DEPTH_IMAGE_DICTIONARY_TE, ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
 
         # hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
@@ -1008,7 +1015,8 @@ if __name__ == "__main__":
         learning_rate = 5e-5#1e-5
         #loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()
         #loss_function2 = DNN.laplacian_mse_with_coords
-        loss_function3 = DNN.value_mse_DoubleSiren_with_coords #DNN.value_mse_with_coords
+        #loss_function3 = DNN.value_mse_DoubleSiren_with_coords #DNN.value_mse_with_coords
+        loss_function3 = DNN.value_mse_mask_with_coords #DNN.value_mse_with_coords
         
 
         #trajectory_training_dataset = trajectory_data_set
@@ -1065,8 +1073,8 @@ if __name__ == "__main__":
         #loss_function = nn.MSELoss()
         #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
         #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
-        testModel = DNN.ConvolutionalNeuralProcessImplicit2D_DoubleHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
-        
+        #testModel = DNN.ConvolutionalNeuralProcessImplicit2D_DoubleHypernetWithMultiplier(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplierAndMask(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
         
         testModel.cuda()
         testModel.eval()

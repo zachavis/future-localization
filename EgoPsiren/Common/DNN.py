@@ -955,6 +955,71 @@ class ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplier(nn.Module):
             param.requires_grad = False
 
 
+class ConvolutionalNeuralProcessImplicit2DHypernetWithMultiplierAndMask(nn.Module):
+    def __init__(self, in_features, out_features, image_resolution=None, partial_conv=False):
+        super().__init__()
+        latent_dim = LATENT_DIMENSION
+
+        if partial_conv:
+            self.encoder = PartialConvImgEncoder(channel=in_features, image_resolution=image_resolution)
+        else:
+            self.encoder = ConvImgEncoder(channel=in_features, image_resolution=image_resolution, latent_dimension = latent_dim)
+        
+        self.hypo_net = SirenMM(in_features=2,out_features=out_features,num_hidden_layers=3,hidden_features=32,outermost_linear=True,nonlinearity='sine')  #Siren(in_features=2, out_features=out_features, #modules.SingleBVPNet(out_features=out_features, type='sine', sidelength=image_resolution, in_features=2)
+        
+        self.hyper_net = HyperNetwork(hyper_in_features=latent_dim, hyper_hidden_layers=1, hyper_hidden_features=256,
+                                      hypo_module=self.hypo_net)
+
+        self.multiplier_net = ConvImgIntensity(channel=in_features, image_resolution=image_resolution, latent_dimension = latent_dim)
+
+        print(self)
+
+    def forward(self, model_input):
+        if model_input.get('embedding', None) is None:
+            embedding = self.encoder(model_input['img_sparse'])
+        else:
+            embedding = model_input['embedding']
+        hypo_params = self.hyper_net(embedding)
+
+        siren_output = self.hypo_net(model_input, params=hypo_params)
+
+        intensity = self.multiplier_net(model_input['img_sparse'])
+        intensity = torch.flatten(intensity,start_dim=2)
+        intensity = torch.transpose(intensity,1,2)
+
+        intensity =  intensity*.9 + .1 # clamping
+        mask = torch.unsqueeze( torch.reshape(model_input['img_mask'],(model_input['img_mask'].shape[0],-1)), -1)
+        masked_intensity = intensity * mask + (torch.ones(intensity.shape).cuda()-mask)
+        
+        siren = -nn.Sigmoid()(-siren_output['model_out'])*.9+.1 # clamping
+        
+        # Get SIREN with coord subset
+        if 'derivative_siren' in model_input:
+            dsiren_output = self.hypo_net(model_input['derivative_siren'], params=hypo_params)
+            dsiren = -nn.Sigmoid()(-dsiren_output['model_out'])*.9+.1
+        else:
+            dsiren_output = {'model_in':None}
+            dsiren = None
+
+
+        model_output = siren * masked_intensity
+
+
+        # instead of siren_output['model_out'], use sigmoided version
+        return {'model_in': siren_output['model_in'], 'model_out':model_output, 'siren_out': siren, 'dsiren_in':dsiren_output['model_in'], 'dsiren_out':dsiren, 'latent_vec': embedding,
+                'hypo_params': hypo_params, 'raw_intensity': intensity, 'intensity':masked_intensity }
+
+    def get_hypo_net_weights(self, model_input):
+        embedding = self.encoder(model_input['img_sparse'])
+        hypo_params = self.hyper_net(embedding)
+        return hypo_params, embedding
+
+    def freeze_hypernet(self):
+        for param in self.hyper_net.parameters():
+            param.requires_grad = False
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+
 
 
 class ConvolutionalNeuralProcessImplicit2D_DoubleHypernetWithMultiplier(nn.Module):
@@ -1002,8 +1067,11 @@ class ConvolutionalNeuralProcessImplicit2D_DoubleHypernetWithMultiplier(nn.Modul
 
         #placeholder = torch.unsqueeze( torch.reshape(model_input['img_masks'],(model_input['img_masks'].shape[0],-1)), -1)
         #placeholder = torch.unsqueeze(placeholder,-1)
-        sirenB *= torch.unsqueeze( torch.reshape(model_input['img_masks'],(model_input['img_masks'].shape[0],-1)), -1)
-        
+        mask = torch.unsqueeze( torch.reshape(model_input['img_masks'],(model_input['img_masks'].shape[0],-1)), -1)
+        sirenB *= mask
+        sirenB += (torch.ones(sirenB.shape) - mask)
+        sirenB = torch.clamp(sirenB,min=0,max=1)
+
         # Get SIREN with coord subset
         if 'derivative_siren' in model_input:
             dsiren_output = self.hypo_net(model_input['derivative_siren'], params=hypo_paramsA)
@@ -1017,7 +1085,7 @@ class ConvolutionalNeuralProcessImplicit2D_DoubleHypernetWithMultiplier(nn.Modul
         model_output = sirenA * sirenB
 
         # instead of siren_output['model_out'], use sigmoided version
-        return {'model_in': siren_outputA['model_in'], 'model_out':model_output, 'sirenA_out': sirenA, 'sirenB_out': sirenB, 'dsiren_in':dsiren_output['model_in'], 'dsiren_out':dsiren, 'latent_vec': embedding}
+        return {'model_in': siren_outputA['model_in'], 'mask':mask, 'model_out':model_output, 'sirenA_out': sirenA, 'sirenB_out': sirenB, 'dsiren_in':dsiren_output['model_in'], 'dsiren_out':dsiren, 'latent_vec': embedding}
 
     def get_hypo_net_weights(self, model_input):
         embedding = self.encoder(model_input['img_sparse'])
@@ -1559,6 +1627,67 @@ def value_mse(model_outputs_dict, coords, gt_value_dict, epoch, dim=(192,192)):
 
 #laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds[0],preds[1], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
 value_mse_with_coords = lambda preds,gt,epoch: value_mse(preds,preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+
+
+
+
+
+def value_mse_mask (model_outputs_dict, coords, gt_value_dict, epoch, dim=(192,192)):
+    #model_outputs = torch.squeeze(model_outputs,-1)
+    #multiplier = torch.zeros(coords.shape)
+
+    upper_end = dim[0]
+    
+    raw_intensity = model_outputs_dict['raw_intensity']
+    intensity = model_outputs_dict['intensity']
+   
+    regularizer_batch = torch.mean(raw_intensity,dim=[1,2])
+    regularizer = torch.mean(regularizer_batch)/20.0
+
+    batch_size = model_outputs_dict['model_out'].shape[0]
+    prediction = torch.reshape(model_outputs_dict['model_out'],(batch_size,1,dim[0],dim[1]))
+    #resultA = model_outputs_dict['model_out'].get_device()
+    #resultB = prediction.get_device()
+    pred_goals = RemapRange(SoftArgmax2D(window_fn="Parzen")(-prediction),0,upper_end,-1,1)
+    goals = torch.unsqueeze(gt_value_dict['goal'],1)
+
+
+    multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+    goal_loss = torch.nn.MSELoss()(pred_goals,goals)
+    implicit_field_loss = torch.nn.L1Loss()(model_outputs_dict['model_out'] * multiplier, gt_value_dict['field'] * multiplier)
+    value_loss = 0.1 * goal_loss + implicit_field_loss + regularizer
+    #print("\tintensity loss:", regularizer.item())
+    #print("\tgoal loss:", goal_loss.item())
+    #print("\timplicit field loss:", implicit_field_loss.item())
+    #print("")
+    return value_loss
+
+#def value_mse(model_outputs_dict, coords, gt_value, epoch):
+#    #model_outputs = torch.squeeze(model_outputs,-1)
+#    #multiplier = torch.zeros(coords.shape)
+
+#    raw_mask = model_outputs_dict['intensity']
+#    mask =  raw_mask*.9 + .1
+#    regularizer_batch = torch.mean(raw_mask,dim=[1,2])
+#    regularizer = torch.mean(regularizer_batch)/20.0
+
+#    raw_siren = model_outputs_dict['siren_out']
+#    siren = torch.relu(-raw_siren)+.1
+#    #model_outputs = torch.relu(-model_outputs_dict['model_out']) + .1 # SIREN values should be between -inf and 0, although initially there could be positive values. This is essentially a ReLU
+#    multiplier = torch.unsqueeze(torch.exp(0.5*(coords[:,:,1] + 1)),-1)
+#    #test = torch.mean(multiplier)/10 # maybe equal to above, but just to be safe using the two step version
+#    value_loss = torch.nn.L1Loss()(-1 * mask * siren * multiplier, gt_value * multiplier) + regularizer
+#    print("intensity loss:", regularizer)
+#    return value_loss
+
+#laplacian_mse_with_coords = lambda preds,gt,epoch: laplacian_mse(preds[0],preds[1], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+value_mse_mask_with_coords = lambda preds,gt,epoch: value_mse_mask(preds,preds['model_in'], gt,epoch) # TODO: CAUTION: these positions are inneffective when using stochastic sampling
+
+
+
+
+
 
 
 
