@@ -186,7 +186,7 @@ if __name__ == "__main__":
     overfitoutputfile = ''
     
     train_test_directories = ['dummytrain','dummytest']
-
+    #sys.argv[1:] = '-d C:/Data/fut_loc -o C:/Data/ego_models/test_network_exp.pt'.split()
     try:
         opts, args = getopt.getopt(sys.argv[1:],"vd:i:o:",["verbose","data=","imodel=","omodel="])
     except getopt.GetoptError:
@@ -578,6 +578,37 @@ if __name__ == "__main__":
                 # Generating EgoRetinalMap
                 if USE_EGO:
 
+                    
+                    all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ], dtype=np.float32)
+                    all_pixel_coords[:,0] = ego_pix2t(all_pixel_coords[:,0])
+                    all_pixel_coords[:,1] = ego_pix2r(all_pixel_coords[:,1])
+                    all_pixel_coords[:,1] = np.exp(all_pixel_coords[:,1])
+                    z, x = Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
+
+                    coords_3D = np.zeros((len(z),3))
+                    coords_3D[:,0] = x
+                    coords_3D[:,2] = z
+        
+                    coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
+                    coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
+
+
+                    #coords_3D[:,1] *= -1
+
+                    pixels = K_data @ R_rect @ coords_3D.T
+                    pixels /= pixels[2]
+                    #pixels[:,:] /= pixels[2,:]
+
+                    rowmaj_pixels = np.zeros(pixels.shape)
+                    rowmaj_pixels[0] = pixels[1]
+                    rowmaj_pixels[1] = pixels[0]
+
+
+                    img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1],3)
+                    img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
+
+
+
                     if LOAD_DEPTH_IMAGES:
                         # Disparity:
 
@@ -598,7 +629,7 @@ if __name__ == "__main__":
                         rowmaj_disp_pixels_xform[0] = disp_pixels_xform[1]
                         rowmaj_disp_pixels_xform[1] = disp_pixels_xform[0]
 
-                        disp_img2 = interpolate.interpn((range(disp_img.shape[0]),range(disp_img.shape[1])),disp_img, rowmaj_pixels2[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(big_ego_pixel_shape[0], big_ego_pixel_shape[1])
+                        disp_img2 = interpolate.interpn((range(disp_img.shape[0]),range(disp_img.shape[1])),disp_img, rowmaj_disp_pixels_xform[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1])
 
                         depth_pixel_coords2 = np.array( [ [j+.5,i+.5,1.0] for i in range(disp_img.shape[0]) for j in range(disp_img.shape[1]) ], dtype=np.float32)
 
@@ -620,7 +651,7 @@ if __name__ == "__main__":
                         p_normal = tr['up']/np.linalg.norm(tr['up'])
                         p_origin = -tr['up'] #camera assumed to be at 0,0,0
                         #e_origin = np.zeros(3) #zero vector
-                        e_rays = R_rect.T @ np.linalg.inv(K_data2) @ depth_pixel_coords2.T #+0
+                        e_rays = R_rect.T @ np.linalg.inv(K_data_disp) @ depth_pixel_coords2.T #+0
                         e_rays /= np.linalg.norm(e_rays,axis=0)
                         print('norm:', np.linalg.norm(e_rays[:,100]))
 
@@ -652,42 +683,6 @@ if __name__ == "__main__":
                         #points2_dists = np.linalg.norm(dist_pt, axis=0)
 
                         distcheck = np.abs(dist_pt.reshape(disp_img.shape))
-
-
-
-
-
-
-
-                    all_pixel_coords = np.array( [ [j+.5,i+.5] for i in range(ego_pixel_shape[0]) for j in range(ego_pixel_shape[1]) ], dtype=np.float32)
-                    all_pixel_coords[:,0] = ego_pix2t(all_pixel_coords[:,0])
-                    all_pixel_coords[:,1] = ego_pix2r(all_pixel_coords[:,1])
-                    all_pixel_coords[:,1] = np.exp(all_pixel_coords[:,1])
-                    z, x = Polar2Coord(all_pixel_coords[:,0],all_pixel_coords[:,1])
-
-                    coords_3D = np.zeros((len(z),3))
-                    coords_3D[:,0] = x
-                    coords_3D[:,2] = z
-        
-                    coords_3D = (R_rect_ego.T @ coords_3D.T).T # ALIGN "WORLD-SPACE" GROUND PLANE TO CAMERA SPACE
-                    coords_3D -= tr['up'].T # SHIFT PLANE TO CORRECT LOCATION RELATIVE TO CAMERA
-
-
-                    #coords_3D[:,1] *= -1
-
-                    pixels = K_data @ R_rect @ coords_3D.T
-                    pixels /= pixels[2]
-                    #pixels[:,:] /= pixels[2,:]
-
-                    rowmaj_pixels = np.zeros(pixels.shape)
-                    rowmaj_pixels[0] = pixels[1]
-                    rowmaj_pixels[1] = pixels[0]
-
-
-                    img_resized =      interpolate.interpn((range(img.shape[0]),range(img.shape[1])), img*2.0-1.0, rowmaj_pixels[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1],3)
-                    img_channel_swap = np.moveaxis(img_resized,-1,0).astype(np.float32)
-
-
                     
 
 
@@ -715,7 +710,10 @@ if __name__ == "__main__":
 
          
                 if (PRINT_DEBUG_IMAGES):
-                    fig, axes = plt.subplots(1,2)#, figsize=(18,6))
+                    if LOAD_DEPTH_IMAGES:
+                        fig, axes = plt.subplots(1,4)#, figsize=(18,6))
+                    else:
+                        fig, axes = plt.subplots(1,2)#, figsize=(18,6))
                     if USE_EGO:
                         axes[0].imshow(img)
                         #axes[1].imshow(img_rectified)
@@ -725,6 +723,23 @@ if __name__ == "__main__":
                         axes[1].set_xlim(*boundsX)
                         axes[1].set_ylim(*boundsY)
                         axes[1].set_aspect(1)
+
+                        if LOAD_DEPTH_IMAGES:
+                            axes[2].imshow(disp_img2)
+                            axes[2].set_xlim(*boundsX)
+                            axes[2].set_ylim(*boundsY)
+                            axes[2].set_aspect(1)
+                            #boundsX = (0,ego_pixel_shape[1])
+                            #boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            
+                            #axes[3].set_xlim(*boundsX)
+                            #axes[1].set_ylim(*boundsY)
+                            #axes[1].set_aspect(1)
+
+                            axes[3].set_title('Height Image')
+                            #tempval = axes[1].imshow(distafromcam)
+                            tempval = axes[3].imshow(distcheck, cmap='tab20c')
+
                     axes[1].imshow(img_resized)
                     plt.show()
 
