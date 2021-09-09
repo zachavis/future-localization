@@ -150,7 +150,7 @@ import getopt
 from pathlib import Path
 
 
-PRINT_DEBUG_IMAGES = True and not USING_LINUX
+PRINT_DEBUG_IMAGES = False and not USING_LINUX
 LOAD_NETWORK_FROM_DISK = False
 LOAD_DEPTH_IMAGES = True
 #np.seterr(invalid='raise')
@@ -683,8 +683,12 @@ if __name__ == "__main__":
                         #points2_dists = np.linalg.norm(dist_pt, axis=0)
 
                         distcheck = np.abs(dist_pt.reshape(disp_img.shape))
-                    
-
+                        
+                        height_im = interpolate.interpn((range(disp_img.shape[0]),range(disp_img.shape[1])), distcheck, rowmaj_disp_pixels_xform[:2].T , method = 'linear',bounds_error = False, fill_value = 0).reshape(ego_pixel_shape[0], ego_pixel_shape[1])
+                        
+                        img_height_mask = np.zeros(height_im.shape)
+                        img_height_mask[height_im > .5] = 1
+                        img_height_mask[height_im < .5] = 0
 
 
 
@@ -725,7 +729,7 @@ if __name__ == "__main__":
                         axes[1].set_aspect(1)
 
                         if LOAD_DEPTH_IMAGES:
-                            axes[2].imshow(disp_img2)
+                            axes[2].imshow(img_height_mask)
                             axes[2].set_xlim(*boundsX)
                             axes[2].set_ylim(*boundsY)
                             axes[2].set_aspect(1)
@@ -865,6 +869,7 @@ if __name__ == "__main__":
                     RAW_IMAGE_DICTIONARY[dictionary_index] = img
             
                 RESIZED_IMAGE_DICTIONARY[dictionary_index] = img_channel_swap
+                RESIZED_DEPTH_IMAGE_DICTIONARY[dictionary_index] = img_height_mask
                 PIXEL_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 LOG_POLAR_TRAJECTORY_DICTIONARY[dictionary_index] = []
                 COORD_TRAJECTORY_DICTIONARY[dictionary_index] = []
@@ -886,35 +891,36 @@ if __name__ == "__main__":
                 #coord_value = DataGens.Coords2ValueFast(all_pixel_coords,future_trajectory,nscale=1)
 
                 if (PRINT_DEBUG_IMAGES):
-                    coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:COORD_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=.5)
-                    pixcoord = np.array(PIXEL_TRAJECTORY_DICTIONARY[dictionary_index][-1])
-                    argmax2 = DNN.soft_argmax(-torch.reshape(torch.from_numpy(coord_value),(1,1,256,256,1)))
-                    argmax = DNN.SoftArgmax2D(window_fn="Parzen")(-torch.reshape(torch.from_numpy(coord_value),(1,1,256,256)))
+                    #coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:COORD_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=.5)
+                    #pixcoord = np.array(PIXEL_TRAJECTORY_DICTIONARY[dictionary_index][-1])
+                    #argmax2 = DNN.soft_argmax(-torch.reshape(torch.from_numpy(coord_value),(1,1,256,256,1)))
+                    #argmax = DNN.SoftArgmax2D(window_fn="Parzen")(-torch.reshape(torch.from_numpy(coord_value),(1,1,256,256)))
 
 
-                    fig, ax = plt.subplots(1,1)#, figsize=(36,6))
-                    axes = [ax]
+                    #fig, ax = plt.subplots(1,1)#, figsize=(36,6))
+                    #axes = [ax]
 
-                    boundsX = (0,ego_pixel_shape[1])
-                    boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-                    axes[0].set_xlim(*boundsX)
-                    axes[0].set_ylim(*boundsY)
+                    #boundsX = (0,ego_pixel_shape[1])
+                    #boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+                    #axes[0].set_xlim(*boundsX)
+                    #axes[0].set_ylim(*boundsY)
 
-                    #axes[1].set_xlim(*boundsX)
-                    #axes[1].set_ylim(*boundsY)
+                    ##axes[1].set_xlim(*boundsX)
+                    ##axes[1].set_ylim(*boundsY)
 
-                    tempval = axes[0].imshow(np.reshape(coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+                    #tempval = axes[0].imshow(np.reshape(coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
         
         
-                    trajnp = np.array(future_trajectory)
-                    axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
-                    axes[0].plot(pixcoord[0], pixcoord[1], 'rx', markersize=8)
-                    axes[0].plot(argmax[0,0,0], argmax[0,0,1], 'mx', markersize=8)
-                    axes[0].plot(argmax2[0,0,1], argmax2[0,0,0], 'bx', markersize=8)
+                    #trajnp = np.array(future_trajectory)
+                    #axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
+                    #axes[0].plot(pixcoord[0], pixcoord[1], 'rx', markersize=8)
+                    #axes[0].plot(argmax[0,0,0], argmax[0,0,1], 'mx', markersize=8)
+                    #axes[0].plot(argmax2[0,0,1], argmax2[0,0,0], 'bx', markersize=8)
         
-                    cax = fig.add_axes([.3, .95, .4, .05])
-                    fig.colorbar(tempval, cax, orientation='horizontal')
-                    plt.show()
+                    #cax = fig.add_axes([.3, .95, .4, .05])
+                    #fig.colorbar(tempval, cax, orientation='horizontal')
+                    #plt.show()
+                    print('This doesn\'t work for some reason')
 
             count += 1
 
@@ -937,26 +943,27 @@ if __name__ == "__main__":
 
 
         if (PRINT_DEBUG_IMAGES):
-            fig, ax = plt.subplots(1,1)
+            #fig, ax = plt.subplots(1,1)
 
-            boundsX = (0,ego_pixel_shape[1])
-            boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
-            ax.set_xlim(*boundsX)
-            ax.set_ylim(*boundsY)
-            ax.set_aspect(1)
+            #boundsX = (0,ego_pixel_shape[1])
+            #boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+            #ax.set_xlim(*boundsX)
+            #ax.set_ylim(*boundsY)
+            #ax.set_aspect(1)
 
-            #coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
+            ##coord_x, coord_y = np.meshgrid(range(ego_pixel_shape[1]), range(ego_pixel_shape[0]))
 
-            ax.quiver(gradient_samples[0][:,0], gradient_samples[0][:,1], gradient_samples[1][:,0],gradient_samples[1][:,1], color='red', units='xy' ,scale=1)
+            #ax.quiver(gradient_samples[0][:,0], gradient_samples[0][:,1], gradient_samples[1][:,0],gradient_samples[1][:,1], color='red', units='xy' ,scale=1)
 
-            #ux = vx/np.sqrt(vx**2+vy**2)
-            #uy = vy/np.sqrt(vx**2+vy**2)
+            ##ux = vx/np.sqrt(vx**2+vy**2)
+            ##uy = vy/np.sqrt(vx**2+vy**2)
         
-            for traj in future_trajectory.values():
-                trajnp = np.array(traj)
-                ax.plot(trajnp[:,0], trajnp[:,1], 'r')
+            #for traj in future_trajectory.values():
+            #    trajnp = np.array(traj)
+            #    ax.plot(trajnp[:,0], trajnp[:,1], 'r')
 
-            plt.show()
+            #plt.show()
+            print('Also not working right now')
 
     
 
@@ -968,10 +975,10 @@ if __name__ == "__main__":
         #hyper_trajectory_data_set = DataGens.MassiveHyperTrajectoryDataset(LOG_POLAR_TRAJECTORY_DICTIONARY, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
 
-        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR, RESIZED_DEPTH_IMAGE_DICTIONARY_TR, ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_tr))
 
-        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        hyper_trajectory_data_set_te = DataGens.MassiveHyperTrajectoryDatasetNEURIPS(COORD_TRAJECTORY_DICTIONARY_TE, PIXEL_TRAJECTORY_DICTIONARY_TE, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TE, RESIZED_DEPTH_IMAGE_DICTIONARY_TE, ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
         #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set_te))
 
         # hyper_trajectory_data_set_tr = DataGens.MassiveHyperTrajectoryDataset(COORD_TRAJECTORY_DICTIONARY_TR, PIXEL_TRAJECTORY_DICTIONARY_TR, n_2sample, RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,RESIZED_IMAGE_DICTIONARY_TR,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)

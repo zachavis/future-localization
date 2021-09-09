@@ -756,7 +756,7 @@ class MassiveHyperTrajectoryDataset(torch.utils.data.Dataset):
 
 class MassiveHyperTrajectoryDatasetNEURIPS(torch.utils.data.Dataset):
   'Characterizes a dataset for PyTorch'
-  def __init__(self, trajectories, pixeltrajectories, numItems, recenteringFn, uncenteringFn, img_points, images, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
+  def __init__(self, trajectories, pixeltrajectories, numItems, recenteringFn, uncenteringFn, img_points, images, height_masks, pix2tfn, pix2rfn, polarfn, random=False):#, recenteringFn, images, obstacles = None, multiplier = 100): #coords, dictionary, coord2keyFN, startPos, endPos, graph): #x_map, y_map, mask = None):
     'Initialization'
     
     self.trajectories = trajectories
@@ -766,6 +766,7 @@ class MassiveHyperTrajectoryDatasetNEURIPS(torch.utils.data.Dataset):
     self.recenteringFn = recenteringFn
     self.uncenteringFn = uncenteringFn
     self.images = images
+    self.masks = height_masks
     self.totalpoints = numItems
 
     self.img_points = img_points.astype(np.float32)
@@ -832,8 +833,10 @@ class MassiveHyperTrajectoryDatasetNEURIPS(torch.utils.data.Dataset):
     minimumval = np.min(derivs)
     dsiren_output_gradients = ( derivs / self.datascale).astype(np.float32) #/np.linalg.norm(derivs,axis=1)[:,None]
     
+
+    mask_return = None if self.masks is None else self.masks[key]
     #dsiren_output_gradients = dsiren_output_gradients[:,[1,0]] 
-    return {'img_sparse':self.images[key], 'coords':self.recenteringFn(input), 'derivative_siren':{'coords':self.recenteringFn(dsiren_input) } }, {'field':output, 'walkability':output_walkability, 'gradient':dsiren_output_gradients, 'goal':goal_pos} #self.recenteringFn(input), output #
+    return {'img_sparse':self.images[key], 'img_masks':mask_return, 'coords':self.recenteringFn(input), 'derivative_siren':{'coords':self.recenteringFn(dsiren_input) } }, {'field':output, 'walkability':output_walkability, 'gradient':dsiren_output_gradients, 'goal':goal_pos} #self.recenteringFn(input), output #
 
 
   def __getitem__(self, index):

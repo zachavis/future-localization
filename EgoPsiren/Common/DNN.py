@@ -999,6 +999,10 @@ class ConvolutionalNeuralProcessImplicit2D_DoubleHypernetWithMultiplier(nn.Modul
         
         sirenA = -nn.Sigmoid()(-siren_outputA['model_out'])*.9+.1 # clamping
         sirenB = nn.Sigmoid()(siren_outputB['model_out'])*.9+.1 # clamping
+
+        #placeholder = torch.unsqueeze( torch.reshape(model_input['img_masks'],(model_input['img_masks'].shape[0],-1)), -1)
+        #placeholder = torch.unsqueeze(placeholder,-1)
+        sirenB *= torch.unsqueeze( torch.reshape(model_input['img_masks'],(model_input['img_masks'].shape[0],-1)), -1)
         
         # Get SIREN with coord subset
         if 'derivative_siren' in model_input:
