@@ -173,7 +173,7 @@ if __name__ == "__main__":
     ego_pixel_shape = (img_height,int(img_height*aspect_ratio)) # y,x | vert,horz
     
     FILE_UPPER_LIMIT = 1000 # a number larger than the number of images in a single directory, used for dictionary indexing
-    n_folders = 1
+    n_folders = 100
 
 
     # FORNOW: Just going to assume it's only in train mode
@@ -185,7 +185,7 @@ if __name__ == "__main__":
     outputfile = ''
     overfitoutputfile = ''
     
-    train_test_directories = ['dummytrain','dummytest']
+    train_test_directories = ['train','test']
     #sys.argv[1:] = '-d C:/Data/fut_loc -o C:/Data/ego_models/test_network_exp.pt'.split()
     try:
         opts, args = getopt.getopt(sys.argv[1:],"vd:i:o:",["verbose","data=","imodel=","omodel="])
@@ -290,7 +290,7 @@ if __name__ == "__main__":
 
     for data_subset in train_test_directories:
 
-        if data_subset == 'dummytrain':
+        if data_subset == train_test_directories[0]:
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TR
             RESIZED_DEPTH_IMAGE_DICTIONARY = RESIZED_DEPTH_IMAGE_DICTIONARY_TR
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TR
@@ -302,7 +302,7 @@ if __name__ == "__main__":
             TRAJ_IN_IMAGE_DICTIONARY = TRAJ_IN_IMAGE_DICTIONARY_TR
             
         
-        if data_subset == 'dummytest':
+        if data_subset == train_test_directories[1]:
             RESIZED_IMAGE_DICTIONARY = RESIZED_IMAGE_DICTIONARY_TE
             RESIZED_DEPTH_IMAGE_DICTIONARY = RESIZED_DEPTH_IMAGE_DICTIONARY_TE
             LOG_POLAR_TRAJECTORY_DICTIONARY = LOG_POLAR_TRAJECTORY_DICTIONARY_TE
@@ -439,7 +439,11 @@ if __name__ == "__main__":
                     print('could not find disparity image file')
                     continue
                 elif LOAD_DEPTH_IMAGES:
-                    disp_img = np.genfromtxt(disp_im, delimiter=',')[:,:-1]
+                    raw_data = np.genfromtxt(disp_im, delimiter=',')
+                    if raw_data.ndim < 2:
+                        print('disparity image file is empty.')
+                        continue
+                    disp_img = raw_data[:,:-1]
 
 
                 #cv2.imshow('intermediate',intermediate)
@@ -653,7 +657,7 @@ if __name__ == "__main__":
                         #e_origin = np.zeros(3) #zero vector
                         e_rays = R_rect.T @ np.linalg.inv(K_data_disp) @ depth_pixel_coords2.T #+0
                         e_rays /= np.linalg.norm(e_rays,axis=0)
-                        print('norm:', np.linalg.norm(e_rays[:,100]))
+                        #print('norm:', np.linalg.norm(e_rays[:,100]))
 
             
             
