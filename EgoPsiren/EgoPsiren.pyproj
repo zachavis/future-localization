@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>bf1d0411-f2b6-4b3d-ac07-f174c739ecfc</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>fair_reconstruction.py</StartupFile>
+    <StartupFile>Psiren_testing.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -69,6 +69,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="point_cloud_visualizer.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Psiren_testing.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="undistort_test.py">
