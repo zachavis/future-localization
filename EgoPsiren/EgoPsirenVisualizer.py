@@ -75,8 +75,10 @@ if __name__ == "__main__":
 
     #overfit_imploc_192_full_synthetic_grad
     #overfit_VAE_192_imageprior_full_synth
-
-    network = torch.load('overfit_doublesiren_walk.pt')
+    
+    #network = torch.load('overfit_doublesiren_walk.pt')
+    
+    network = torch.load('overfit_ego_with_mask_1.pt')
     #network = torch.load('overfit_imploc_192_full_final_grad.pt') #torch.load('hypernet_1200imgs_300epochs.pt') #overfit_test_network_exp_newnewloss
     vae_network = torch.load('overfit_VAE_192_imageprior_full.pt') #''overfit_test_network_exp_AE.pt
     #test = network.module.state_dict()
@@ -797,6 +799,7 @@ if __name__ == "__main__":
             test_coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:test_ws_trajectory},None,None,stddev=.5, dstddev=1)#.5)
 
             test_image_prediction = torch.from_numpy( np.expand_dims(test_image,0) )
+            test_mask = torch.ones((1,192*192,1))
             print(test_image_prediction.device)
 
             #network.cpu()
@@ -814,7 +817,7 @@ if __name__ == "__main__":
 
             if not USE_INTENSITY:
                 image_siren_coords_tensor = torch.unsqueeze( torch.from_numpy(image_siren_coords), 0)
-                image_siren_predictions = network({'coords':image_siren_coords_tensor.cuda(),'img_sparse':test_image_prediction.cuda()})
+                image_siren_predictions = network({'coords':image_siren_coords_tensor.cuda(),'img_mask':test_mask.cuda(),'img_sparse':test_image_prediction.cuda()})
                 image_siren_image = (image_siren_predictions['model_out'], image_siren_predictions['model_in'])
                 image_siren_image = image_siren_image[0].cpu().view(raw_image.shape[:2]).detach().numpy()
                 image_siren_alpha = image_siren_depths.reshape(raw_image.shape[:2])
@@ -837,7 +840,7 @@ if __name__ == "__main__":
 
 
             print(all_coords.shape)
-            predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
+            predictions = network({'coords':all_coords.cuda(),'img_mask':test_mask.cuda(),'img_sparse':test_image_prediction.cuda()})
             if type(predictions) is dict:
                 outImage = (predictions['model_out'], predictions['model_in'])
             else:
@@ -871,11 +874,10 @@ if __name__ == "__main__":
             total_network_output = outImage[0].cpu().view(ego_pixel_shape).detach().numpy()
 
             
-            NAVIGATION_STRING = 'sirenA_out' #'siren_out'
-            WALKABILITY_STRING = 'sirenB_out' #'intensity'
+            NAVIGATION_STRING = 'siren_out' # 'sirenA_out' #
+            WALKABILITY_STRING = 'intensity' # 'sirenB_out' #
 
-
-            predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
+            predictions = network({'coords':all_coords.cuda(),'img_mask':test_mask.cuda(),'img_sparse':test_image_prediction.cuda()})
             if type(predictions) is dict:
                 outImage = (predictions[NAVIGATION_STRING], predictions['model_in'])
             else:
@@ -902,7 +904,7 @@ if __name__ == "__main__":
                 axes[1].imshow(total_network_output, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
         
             # Rerun again for gradient
-            predictions = network({'coords':all_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
+            predictions = network({'coords':all_coords.cuda(),'img_mask':test_mask.cuda(),'img_sparse':test_image_prediction.cuda()})
             if type(predictions) is dict:
                 outImage = (predictions['model_out'], predictions['model_in'])
             else:
@@ -910,7 +912,7 @@ if __name__ == "__main__":
             outImageA = -DNN.gradient(*outImage)#-DNN.gradient(*predModel(outImage[1]))
         
             if not USE_INTENSITY:
-                predictions = network({'coords':dense_coords.cuda(),'img_sparse':test_image_prediction.cuda()})
+                predictions = network({'coords':dense_coords.cuda(),'img_mask':test_mask.cuda(),'img_sparse':test_image_prediction.cuda()})
                 if type(predictions) is dict:
                     outImage = (predictions['model_out'], predictions['model_in'])
                 else:
@@ -977,7 +979,7 @@ if __name__ == "__main__":
             ########################################################################
             # Let's plan a path through the image via gradient descent
             ########################################################################
-            hypo_params = network.get_hypo_net_weights({'img_sparse':test_image_prediction.cuda()})
+            hypo_params = network.get_hypo_net_weights({'img_sparse':test_image_prediction.cuda(),'img_mask':test_mask.cuda(),})
             start = RecenterTrajDataForward(np.array([[[90,40]]]))
             position = torch.from_numpy(start.astype(np.float32)).cuda()
             n_steps = 500
@@ -1266,6 +1268,7 @@ if __name__ == "__main__":
 
             #if USE_INTENSITY:
             #axes[2].set_title('Intensity Mask')
+            axes[2].set_title('Walkability')
             axes[2].set_xlim(*boundsX)
             axes[2].set_ylim(*boundsY)
                 
@@ -1279,8 +1282,8 @@ if __name__ == "__main__":
             #axes[2].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
             print("Max intensity:",intensity_map.max(),", min intensity:",intensity_map.min())
             #axes[0+load_offset].imshow(outImagea, alpha=.35, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none', cmap='plasma')
-            plt.imsave('walkable.png',intensity_map, cmap='winter')
-            plt.imsave('affordance.png',total_network_output, vmax = 0, vmin = -1.0, cmap='hot')
+            #plt.imsave('walkable.png',intensity_map, cmap='winter')
+            #plt.imsave('affordance.png',total_network_output, vmax = 0, vmin = -1.0, cmap='hot')
             #plt.imsave('egomap.png', np.moveaxis(0.5*(test_image+1),0,-1))
             #plt.imsave('siren.png', sirenimage, cmap='viridis')
 
@@ -1300,7 +1303,7 @@ if __name__ == "__main__":
             #combined = - (intensity_map*.9 + .1) * np.maximum(-outImagea,0)
             #print("comb max:", np.max(combined),"comb min:",np.min(combined))
             #(outImagea*10).astype(int).astype(float)/10
-            tempval = axes[3].imshow(total_network_output, extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none',cmap='hot')
+            tempval = axes[3].imshow(total_network_output, extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -0.3, interpolation='none')#,cmap='hot')
             #axes[3].plot(trajnp[:,0], trajnp[:,1], 'm--')
             #axes[3].plot(tpix_AlexNet, rpix_AlexNet, 'r--')
             #axes[3].plot(traj_vae_tpix, traj_vae_logrpix, 'w--')
@@ -1324,7 +1327,7 @@ if __name__ == "__main__":
             axes[4].set_xlim(*boundsX)
             axes[4].set_ylim(*boundsY)
             axes[4].set_aspect(1)
-            axes[4].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -1.0, interpolation='none', cmap='hot')
+            axes[4].imshow(np.reshape(test_coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], vmax = 0.0, vmin = -0.3, interpolation='none')#, cmap='hot')
             #print('avg gt:',np.mean(np.reshape(test_coord_value,(ego_pixel_shape))))
             #axes[2+load_offset].plot(trajnp[:,0], trajnp[:,1], 'm--')
             #axes[2+load_offset].plot(tpix_AlexNet, rpix_AlexNet, 'c--')

@@ -959,6 +959,17 @@ if __name__ == "__main__":
                     grid_dis = Distort(pixels,calib['omega'],calib['K'])
 
 
+                    #coords_3D = coords_3D_aligned_cam - tr['up'][:,None]
+                    ##calib['K'] @ cameraRotation
+                    #grid_pixels = K_data @ coords_3D #@ cameraRotation
+                    #grid_pixels /= grid_pixels[2]
+                    #grid_pixels = grid_pixels[:2]
+
+                    #front_coords = coords_3D[2,:]>.1
+                
+                    #plane_mask = np.reshape(front_coords, test_x.shape)
+                    #plane_indices = np.reshape(np.arange(len(front_coords)), test_x.shape)
+
 
 
                     print('projection stuff')
