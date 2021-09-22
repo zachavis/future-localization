@@ -12,6 +12,7 @@ if not USING_LINUX:
 
 import numpy as np
 from scipy.spatial import cKDTree as KDTree
+from scipy import ndimage
 import math
 import cv2
 import pandas as pd
@@ -150,7 +151,7 @@ import getopt
 from pathlib import Path
 
 
-PRINT_DEBUG_IMAGES = False and not USING_LINUX
+PRINT_DEBUG_IMAGES = True and not USING_LINUX
 LOAD_NETWORK_FROM_DISK = False
 LOAD_DEPTH_IMAGES = True
 #np.seterr(invalid='raise')
@@ -161,6 +162,8 @@ if __name__ == "__main__":
 
     BATCH_SIZE = 2
     N_WORKERS = 0
+
+    FIELD_TRAJ_STD_DEV = .5;
     
     # TODO put these values in a settings file on disk to force uniformity across programs
     img_height = 192 #128#64
@@ -895,6 +898,79 @@ if __name__ == "__main__":
                 #coord_value = DataGens.Coords2ValueFast(all_pixel_coords,future_trajectory,nscale=1)
 
                 if (PRINT_DEBUG_IMAGES):
+                    #coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:COORD_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=FIELD_TRAJ_STD_DEV)
+                    coord_value = DataGens.Coords2ValueFastWS_NEURIPS(all_pixel_coords_xformed,{0:COORD_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=FIELD_TRAJ_STD_DEV)
+                    coord_grad = DataGens.Coords2ValueFastWS_NEURIPS_DERIVATIVE(all_pixel_coords_xformed,{0:COORD_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=FIELD_TRAJ_STD_DEV)
+                    pixcoord = np.array(PIXEL_TRAJECTORY_DICTIONARY[dictionary_index][-1])
+                    argmax2 = DNN.soft_argmax(-torch.reshape(torch.from_numpy(coord_value),(1,1,ego_pixel_shape[1],ego_pixel_shape[0],1)))
+                    argmax = DNN.SoftArgmax2D(window_fn="Parzen")(-torch.reshape(torch.from_numpy(coord_value),(1,1,ego_pixel_shape[1],ego_pixel_shape[0])))
+
+
+                    fig, ax = plt.subplots(1,1)#, figsize=(36,6))
+                    axes = [ax]
+
+                    boundsX = (0,ego_pixel_shape[1])
+                    boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+                    axes[0].set_xlim(*boundsX)
+                    axes[0].set_ylim(*boundsY)
+
+                    #axes[1].set_xlim(*boundsX)
+                    #axes[1].set_ylim(*boundsY)
+
+                    tempval = axes[0].imshow(np.reshape(coord_value,(ego_pixel_shape)), extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+        
+        
+                    trajnp = np.array(future_trajectory)
+                    axes[0].plot(trajnp[:,0], trajnp[:,1], 'r')
+                    axes[0].plot(pixcoord[0], pixcoord[1], 'rx', markersize=8)
+                    axes[0].plot(argmax[0,0,0], argmax[0,0,1], 'mx', markersize=8)
+                    axes[0].plot(argmax2[0,0,1], argmax2[0,0,0], 'bx', markersize=8)
+        
+                    cax = fig.add_axes([.3, .95, .4, .05])
+                    fig.colorbar(tempval, cax, orientation='horizontal')
+                    plt.show()
+
+                    fig, axes = plt.subplots(1,4)
+                    boundsX = (0,ego_pixel_shape[1])
+                    boundsY = (0,ego_pixel_shape[0]) #(ego_pixel_shape[0],0) #
+                    axes[0].set_xlim(*boundsX)
+                    axes[0].set_ylim(*boundsY)
+                    axes[1].set_xlim(*boundsX)
+                    axes[1].set_ylim(*boundsY)
+                    axes[2].set_xlim(*boundsX)
+                    axes[2].set_ylim(*boundsY)
+                    axes[3].set_xlim(*boundsX)
+                    axes[3].set_ylim(*boundsY)
+
+                    
+                    value_image = np.reshape(coord_value,(ego_pixel_shape))
+                    grad_image = np.reshape(coord_grad, (*ego_pixel_shape,2))
+                    
+                    # Define kernel for x differences
+                    kx = np.array([[1,0,-1],[2,0,-2],[1,0,-1]])
+                    # Define kernel for y differences
+                    ky = np.array([[1,2,1] ,[0,0,0], [-1,-2,-1]])
+                    ## Perform x convolution
+                    dx=ndimage.convolve(value_image,kx)
+                    ## Perform y convolution
+                    dy=ndimage.convolve(value_image,ky)
+                    ##sobel=np.hypot(x,y)
+                    ##plt.imshow(sobel,cmap=plt.cm.gray)
+
+                    
+                    tempval = axes[0].imshow(dx, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+                    tempval = axes[1].imshow(dy, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+                    tempval = axes[2].imshow(grad_image[:,:,0], extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+                    tempval = axes[3].imshow(grad_image[:,:,1], extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
+
+
+                    plt.show()
+
+
+
+
+
+
                     #coord_value = DataGens.Coords2ValueFastWS(all_pixel_coords_xformed,{0:COORD_TRAJECTORY_DICTIONARY[dictionary_index]},None,None,stddev=.5)
                     #pixcoord = np.array(PIXEL_TRAJECTORY_DICTIONARY[dictionary_index][-1])
                     #argmax2 = DNN.soft_argmax(-torch.reshape(torch.from_numpy(coord_value),(1,1,256,256,1)))

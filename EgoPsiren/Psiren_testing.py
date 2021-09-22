@@ -665,7 +665,7 @@ if __name__ == "__main__":
 
 
 
-    if False:
+    if True:
         n_samples = 30000 # 25000
         n_obstsamples = 1#30000
         n_2sample_laplacian = 10000
@@ -744,10 +744,10 @@ if __name__ == "__main__":
         #print(pix.dtype)
         # print(pix[0,0,1])
 
-        #hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward,torch.zeros((1,32,32)))
-        #hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset2(future_trajectory,n_2sample_laplacian,RecenterTrajDataForward,all_pixel_coords,img_channel_swap) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset2(newtraj,n_2sample_laplacian,RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,img_channel_swap,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
-        i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
+        ##hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward,torch.zeros((1,32,32)))
+        ##hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset2(future_trajectory,n_2sample_laplacian,RecenterTrajDataForward,all_pixel_coords,img_channel_swap) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        #hyper_trajectory_data_set = DataGens.HyperTrajectoryDataset2(newtraj,n_2sample_laplacian,RecenterTrajDataForward,RecenterFieldDataBackward,all_pixel_coords,img_channel_swap,ego_pix2t,ego_pix2r,Polar2Coord) #DataGens.HyperTrajectoryDataset(future_trajectory, RecenterTrajDataForward, img_channel_swap)
+        #i, (pos, pix) = next(enumerate(hyper_trajectory_data_set))
 
 
 
@@ -767,7 +767,7 @@ if __name__ == "__main__":
 
 
         #Training parameters
-        num_epochs = 10000 #15000 #1000
+        num_epochs = 1000 #15000 #1000
         print_interval = 1
         learning_rate = 5e-5#1e-5
         loss_function = DNN.gradients_mse_with_coords #gradients_and_laplacian_mse_with_coords #nn.MSELoss()
@@ -785,12 +785,14 @@ if __name__ == "__main__":
         laplacian_training_generator = torch.utils.data.DataLoader(laplacian_training_dataset, batch_size = 50, shuffle=True)
         laplacian_testing_generator = torch.utils.data.DataLoader(laplacian_testing_dataset, batch_size = 50)
         
-        hyper_training_set = hyper_trajectory_data_set
-        hyper_testing_set = hyper_trajectory_data_set
-        hyper_training_generator = torch.utils.data.DataLoader(hyper_training_set, batch_size = 1, shuffle=True)
-        hyper_testing_generator = torch.utils.data.DataLoader(hyper_testing_set, batch_size = 1)
+        i, (pos, pix) = next(enumerate(laplacian_training_dataset))
+
+        #hyper_training_set = hyper_trajectory_data_set
+        #hyper_testing_set = hyper_trajectory_data_set
+        #hyper_training_generator = torch.utils.data.DataLoader(hyper_training_set, batch_size = 1, shuffle=True)
+        #hyper_testing_generator = torch.utils.data.DataLoader(hyper_testing_set, batch_size = 1)
         
-        i, (pos, pix) = next(enumerate(hyper_training_generator))
+        #i, (pos, pix) = next(enumerate(hyper_training_generator))
         
         
         field_training_dataset = field_data_set
@@ -801,14 +803,14 @@ if __name__ == "__main__":
 
         
         
-        gt_field_training_dataset = gt_field_dataset
-        gt_field_testing_dataset = gt_field_training_dataset
-        gt_field_training_generator = torch.utils.data.DataLoader(gt_field_training_dataset, batch_size = 1, shuffle=True)
-        gt_field_testing_generator = torch.utils.data.DataLoader(gt_field_testing_dataset, batch_size = 1)
+        #gt_field_training_dataset = gt_field_dataset
+        #gt_field_testing_dataset = gt_field_training_dataset
+        #gt_field_training_generator = torch.utils.data.DataLoader(gt_field_training_dataset, batch_size = 1, shuffle=True)
+        #gt_field_testing_generator = torch.utils.data.DataLoader(gt_field_testing_dataset, batch_size = 1)
 
         #i, (pos, pix) = next(enumerate(gt_field_training_dataset))
         
-        if (False):
+        if False:
             fig, ax = plt.subplots(1,1)#, figsize=(36,6))
             axes = [ax]
 
@@ -842,23 +844,23 @@ if __name__ == "__main__":
 
         #Create model
         print("Creating Network . . .")
-        predModel = DNN.Siren(in_features = 2, hidden_features = 32, hidden_layers = 3, out_features = 1, outermost_linear=True) #PSIREN(map.shape[1], map.shape[0], 1000, 2000, 1000)  #8,5
+        testModel = DNN.SirenMM(in_features = 2, hidden_features = 32, hidden_layers = 3, out_features = 1, outermost_linear=True) #PSIREN(map.shape[1], map.shape[0], 1000, 2000, 1000)  #8,5
 
 
-        network = predModel;
-        optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
-        #loss_function = nn.MSELoss()
-        #testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
-        testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
-        testModel.cuda()
-        testModel.eval()
-        testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,*img_channel_swap.shape)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
-        #testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,1,32,32)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
-        #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=64,num_hidden_layers=3) #Last used
-        #network = predModel#testModel#
+        ##network = predModel;
+        #optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
+        ##loss_function = nn.MSELoss()
+        ##testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=1,out_features=1,image_resolution=(32,32))
+        ##testModel = DNN.ConvolutionalNeuralProcessImplicit2DHypernet(in_features=3,out_features=1,image_resolution=(img_channel_swap.shape[1],img_channel_swap.shape[2]))
+        #testModel.cuda()
+        #testModel.eval()
+        #testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,*img_channel_swap.shape)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
+        ##testingTestModel = testModel({'embedding':None, 'img_sparse':torch.zeros((1,1,32,32)).cuda(), 'coords':torch.zeros(1,20,2).cuda()})
+        ##predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=64,num_hidden_layers=3) #Last used
+        ##network = predModel#testModel#
 
-        #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)
-        #predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)#,type='relu')
+        ##predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)
+        ##predModel = DNN.SirenMM(in_features=2,out_features=1,hidden_features=256,num_hidden_layers=3)#,type='relu')
         network = testModel# predModel#
 
         network.cuda()
@@ -867,12 +869,13 @@ if __name__ == "__main__":
         
         print("Parameter count:", DNN.CountParameters(network))
 
-
+        outputfile = "psiren_generic_test.pt"
+        overfitoutputfile = "overfit_" + outputfile
         #DNN.trainAndGraphDerivative(network, gt_field_training_generator, gt_field_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
-        
+        DNN.trainAndGraphDerivative(network, laplacian_training_generator, laplacian_testing_generator, loss_function, optimizer, num_epochs, learning_rate, outputfile, overfitoutputfile, print_interval, print_interval )
         #DNN.trainAndGraphDerivative(network, field_training_generator, field_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
         #DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
-        DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
+        #DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
         ##DNN.trainAndGraphDerivative(network, trajectory_training_generator, trajectory_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
         #DNN.trainAndGraphDerivative2(network, (trajectory_training_generator, laplacian_training_generator), (trajectory_testing_generator, laplacian_testing_generator), (loss_function, loss_function2), optimizer, num_epochs, learning_rate, print_interval )  # I think Last used for RSS submission, smoothing
         ##trainAndGraphDerivative2(network3, (crowd_training_generator,crowd_training_generator3), (crowd_testing_generator, crowd_testing_generator3), (loss_function3,loss_function4), optimizer3, num_epochs, learning_rate, print_interval)
@@ -902,7 +905,7 @@ if __name__ == "__main__":
 
 
         print(all_coords.shape)
-        predictions = network({'coords':all_coords,'img_sparse':torch.zeros((1,*img_channel_swap.shape))})
+        predictions = network({'coords':all_coords}) #,'img_sparse':torch.zeros((1,*img_channel_swap.shape))})
         if type(predictions) is dict:
             outImage = (predictions['model_out'], predictions['model_in'])
         else:
@@ -931,14 +934,14 @@ if __name__ == "__main__":
         axes[1].imshow(outImagea, extent=[*boundsX, *(ego_pixel_shape[0],0)], interpolation='none')#, cmap='gnuplot')
         
         # Rerun again for gradient
-        predictions = network({'coords':all_coords,'img_sparse':torch.zeros((1,*img_channel_swap.shape))})
+        predictions = network({'coords':all_coords}) #,'img_sparse':torch.zeros((1,*img_channel_swap.shape))})
         if type(predictions) is dict:
             outImage = (predictions['model_out'], predictions['model_in'])
         else:
             outImage = predictions
         outImageA = -DNN.gradient(*outImage)#-DNN.gradient(*predModel(outImage[1]))
         
-        predictions = network({'coords':dense_coords,'img_sparse':torch.zeros((1,*img_channel_swap.shape))})
+        predictions = network({'coords':dense_coords}) #,'img_sparse':torch.zeros((1,*img_channel_swap.shape))})
         if type(predictions) is dict:
             outImage = (predictions['model_out'], predictions['model_in'])
         else:
@@ -1114,12 +1117,12 @@ if __name__ == "__main__":
     #        #line = line.strip() #or some other preprocessing
     #        lines.append(line) #storing everything in memory!
             
-    print('\n\n\n')
-    print(type(vTR))
-    print('\n\n\n')
-    print(type(vTR['vTr']))
-    print('\n\n\n')
-    print(vTR['vTr'][0]['up'])
+    #print('\n\n\n')
+    #print(type(vTR))
+    #print('\n\n\n')
+    #print(type(vTR['vTr']))
+    #print('\n\n\n')
+    #print(vTR['vTr'][0]['up'])
 
     #data = pd.read_csv(loc, sep=" ", header=None)
     #data.columns = ["a", "b", "c", "etc

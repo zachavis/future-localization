@@ -9,6 +9,7 @@ USING_LINUX = platform == "linux" or platform == "linux2"
 
 if not USING_LINUX:
     import matplotlib.pyplot as plt
+    from matplotlib import collections  as mc
     from mpl_toolkits.mplot3d import Axes3D, art3d
     from matplotlib.patches import Circle, Ellipse
     #from mpl_toolkits.mplot3d import Axes3D
@@ -911,8 +912,9 @@ if __name__ == "__main__":
 
 
 
-
-                    test_x, test_z  = np.meshgrid(np.linspace(-2,2,5),np.linspace(1,20,20))
+                    
+                    test_x, test_z  = np.meshgrid(np.linspace(-50,50,101),np.linspace(-50,50,101))
+                    #test_x, test_z  = np.meshgrid(np.linspace(-2,2,5),np.linspace(1,20,20))
                     x = test_x.flatten()
                     z = test_z.flatten()
 
@@ -958,19 +960,47 @@ if __name__ == "__main__":
                     pixels = pixels[:2]
                     grid_dis = Distort(pixels,calib['omega'],calib['K'])
 
+                    def GetPlaneLines(coords_cam_aligned, up_vector_with_metric, K_mat):
+                        coords_3D = coords_cam_aligned - up_vector_with_metric[:,None]
+                        #calib['K'] @ cameraRotation
+                        grid_pixels = K_mat @ coords_3D #@ cameraRotation
+                        grid_pixels /= grid_pixels[2]
+                        grid_pixels = grid_pixels[:2]
 
-                    #coords_3D = coords_3D_aligned_cam - tr['up'][:,None]
-                    ##calib['K'] @ cameraRotation
-                    #grid_pixels = K_data @ coords_3D #@ cameraRotation
-                    #grid_pixels /= grid_pixels[2]
-                    #grid_pixels = grid_pixels[:2]
-
-                    #front_coords = coords_3D[2,:]>.1
+                        front_coords = coords_3D[2,:]>.1
                 
-                    #plane_mask = np.reshape(front_coords, test_x.shape)
-                    #plane_indices = np.reshape(np.arange(len(front_coords)), test_x.shape)
+                        plane_mask = np.reshape(front_coords, test_x.shape)
+                        plane_indices = np.reshape(np.arange(len(front_coords)), test_x.shape)
+                        
+                        horizontal_lines = []
+                        for r in range(plane_indices.shape[0]):
+                            for c in range(plane_indices.shape[1]-1):
+                                if plane_mask[r,c] and plane_mask[r,c+1]: # if these points are visible
+                                    idx1 = plane_indices[r,c]
+                                    idx2 = plane_indices[r,c+1]
+                                    coord_tuple = [grid_pixels[:,idx1], grid_pixels[:,idx2]]
+                                    horizontal_lines.append(coord_tuple)
+
+                        vertical_lines = []
+                        for c in range(plane_indices.shape[1]):
+                            for r in range(plane_indices.shape[0]-1):
+                                if plane_mask[r,c] and plane_mask[r+1,c]: # if these points are visible
+                                    idx1 = plane_indices[r,c]
+                                    idx2 = plane_indices[r+1,c]
+                                    coord_tuple = [grid_pixels[:,idx1], grid_pixels[:,idx2]]
+                                    vertical_lines.append(coord_tuple)
+
+                        return horizontal_lines, vertical_lines
+
+                    def DrawPlaneLines(ax, hlines, vlines):
+                        hlc = mc.LineCollection(hlines,colors='m',linewidths=1)
+                        vlc = mc.LineCollection(vlines,colors='m',linewidths=1)
+                        axes[0].add_collection(hlc)
+                        axes[0].add_collection(vlc)
 
 
+
+                    hlines, vlines= GetPlaneLines(coords_3D_aligned_cam, plane_normal_with_metric_aligned_cam, calib['K'])
 
                     print('projection stuff')
                     img_dir = __data_source / __data_images / Path('image{:07d}.jpg'.format(traj_start)) #file_path+'\\image\\image{:07d}.jpg'.format(start_frame)
@@ -1030,12 +1060,12 @@ if __name__ == "__main__":
                     
                         #axes[0].wireframe(grid_dis[0], grid_dis[1], 'k',)
                     
-                        axes[0].plot(grid_dis[0], grid_dis[1], 'mo', markersize = 8.0)
+                        #axes[0].plot(grid_dis[0], grid_dis[1], 'mo', markersize = 8.0)
                     
 
-
+                        DrawPlaneLines(axes[0],hlines,vlines)
                     
-                        #plt.show()
+                        plt.show()
 
 
 
