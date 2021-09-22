@@ -872,7 +872,7 @@ if __name__ == "__main__":
         outputfile = "psiren_generic_test.pt"
         overfitoutputfile = "overfit_" + outputfile
         #DNN.trainAndGraphDerivative(network, gt_field_training_generator, gt_field_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
-        DNN.trainAndGraphDerivative(network, laplacian_training_generator, laplacian_testing_generator, loss_function, optimizer, num_epochs, learning_rate, outputfile, overfitoutputfile, print_interval, print_interval )
+        DNN.trainAndGraphDerivative(network, trajectory_training_generator, trajectory_testing_generator, loss_function, optimizer, num_epochs, learning_rate, outputfile, overfitoutputfile, print_interval, print_interval )
         #DNN.trainAndGraphDerivative(network, field_training_generator, field_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
         #DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function, optimizer, num_epochs, learning_rate, print_interval )
         #DNN.trainAndGraphDerivative(network, hyper_training_generator, hyper_testing_generator, loss_function3, optimizer, num_epochs, learning_rate, print_interval )
